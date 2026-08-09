@@ -16,7 +16,7 @@ Future<void> main() async {
   await session.bootstrap();
   final realtime = RealtimeService(api, session);
   final calls = CallingService(api, realtime);
-  final push = PushBridge(api, session);
+  final push = PushBridge(session, realtime);
   final coordinator = NativeCallCoordinator(api, session, calls, push);
   await coordinator.start();
   if (session.authenticated) {
@@ -29,6 +29,7 @@ Future<void> main() async {
       unawaited(realtime.connect());
       unawaited(push.initialize());
     } else {
+      unawaited(push.unregister());
       unawaited(realtime.disconnect());
     }
   });
@@ -66,10 +67,9 @@ class NativeCallCoordinator {
         await api.post('/call-transfers/$transferId/hangup', data: {});
       }
     } catch (_) {
-      // The Calls screen and realtime stream will expose the latest server state.
-      // A stale native notification may race with another agent accepting a call;
-      // in that case the backend correctly returns conflict/not-found and no retry
-      // should be attempted from this tap.
+      // A stale native notification may race with another agent accepting a
+      // call. The server owns the authoritative transfer state, so no blind
+      // retry is attempted from the notification tap.
     } finally {
       _handling = false;
     }
