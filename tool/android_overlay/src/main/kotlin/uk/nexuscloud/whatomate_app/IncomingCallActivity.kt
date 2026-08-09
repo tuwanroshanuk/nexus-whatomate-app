@@ -1,8 +1,10 @@
 package uk.nexuscloud.whatomate_app
 
+import android.Manifest
 import android.app.Activity
 import android.app.NotificationManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
@@ -10,6 +12,8 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 class IncomingCallActivity : Activity() {
     companion object {
@@ -17,7 +21,11 @@ class IncomingCallActivity : Activity() {
         const val EXTRA_CALLER = "caller"
         const val EXTRA_ACTION = "direct_action"
         const val CALL_NOTIFICATION_ID = 9001
+        private const val MICROPHONE_PERMISSION_REQUEST = 9002
     }
+
+    private var pendingAnswer = false
+    private var subtitleView: TextView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -25,11 +33,19 @@ class IncomingCallActivity : Activity() {
         setTurnScreenOn(true)
 
         val directAction = intent.getStringExtra(EXTRA_ACTION)
-        if (directAction == "answer" || directAction == "decline") {
-            launchFlutter(directAction)
+        if (directAction == "answer") {
+            answerWithPermission()
+            return
+        }
+        if (directAction == "decline") {
+            launchFlutter("decline")
             return
         }
 
+        showIncomingUi()
+    }
+
+    private fun showIncomingUi() {
         val caller = intent.getStringExtra(EXTRA_CALLER).orEmpty().ifBlank { "Incoming call" }
 
         val root = LinearLayout(this).apply {
@@ -52,6 +68,7 @@ class IncomingCallActivity : Activity() {
             gravity = Gravity.CENTER
             setPadding(0, 18, 0, 64)
         }
+        subtitleView = subtitle
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -62,7 +79,7 @@ class IncomingCallActivity : Activity() {
         }
         val answer = Button(this).apply {
             text = "Answer"
-            setOnClickListener { launchFlutter("answer") }
+            setOnClickListener { answerWithPermission() }
         }
         actions.addView(decline, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = 16 })
         actions.addView(answer, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = 16 })
@@ -72,6 +89,34 @@ class IncomingCallActivity : Activity() {
         setContentView(root)
     }
 
+    private fun answerWithPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            launchFlutter("answer")
+            return
+        }
+
+        pendingAnswer = true
+        if (subtitleView == null) showIncomingUi()
+        subtitleView?.text = "Microphone permission is required to answer"
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.RECORD_AUDIO),
+            MICROPHONE_PERMISSION_REQUEST,
+        )
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != MICROPHONE_PERMISSION_REQUEST || !pendingAnswer) return
+        pendingAnswer = false
+        if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            launchFlutter("answer")
+        } else {
+            subtitleView?.text = "Microphone permission denied — enable it to answer calls"
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         // A ringing call is intentionally not dismissed by Back; the user must
         // explicitly answer or decline it.
