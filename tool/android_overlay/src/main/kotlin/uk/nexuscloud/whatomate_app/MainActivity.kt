@@ -56,6 +56,15 @@ class MainActivity : FlutterActivity(), EventChannel.StreamHandler {
                             result.success(mapOf("configured" to true, "token" to token))
                         }
                     }
+                    "showIncomingCall" -> {
+                        val payload = call.argument<Map<String, Any?>>("payload") ?: emptyMap()
+                        CallNotificationHelper.showIncomingCall(this, JSONObject(payload).toString())
+                        result.success(null)
+                    }
+                    "cancelIncomingCall" -> {
+                        CallNotificationHelper.cancelIncomingCall(this)
+                        result.success(null)
+                    }
                     "getInitialCallAction" -> result.success(consumeCallAction(intent))
                     "requestNotificationPermission" -> {
                         requestNotificationPermission()
