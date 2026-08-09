@@ -42,6 +42,7 @@ class WhatomateMessagingService : FirebaseMessagingService() {
             "call_transfer_completed",
             "call_transfer_abandoned",
             "call_transfer_no_answer",
+            "call_transfer_reassigned",
             "call_ended" -> cancelCallNotification()
         }
     }
