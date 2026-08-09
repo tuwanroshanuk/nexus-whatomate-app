@@ -250,7 +250,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
       )),
       Expanded(child: loading ? const Center(child: CircularProgressIndicator()) : RefreshIndicator(
         onRefresh: load,
-        child: contacts.isEmpty ? const ListView(children: [SizedBox(height: 180), Center(child: Text('No conversations'))]) : ListView.separated(
+        child: contacts.isEmpty ? ListView(children: const [SizedBox(height: 180), Center(child: Text('No conversations'))]) : ListView.separated(
           itemCount: contacts.length, separatorBuilder: (_, __) => const Divider(height: 1),
           itemBuilder: (context, i) {
             final c = contacts[i]; final unread = _int(c['unread_count']);
