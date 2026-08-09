@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import 'api_client.dart';
@@ -63,6 +64,8 @@ class CallingService extends ChangeNotifier {
   CallingService(this.api, this.realtime) {
     _ws = realtime.events.listen(_onEvent);
   }
+
+  static const _nativePushChannel = MethodChannel('uk.nexuscloud.whatomate/push');
 
   final WhatomateApi api;
   final RealtimeService realtime;
@@ -203,16 +206,12 @@ class CallingService extends ChangeNotifier {
       direction: 'incoming',
       status: 'connecting',
     );
+    unawaited(_cancelNativeIncoming());
     notifyListeners();
 
     try {
       final peer = await _newPeer();
       final offer = await _createOffer(peer);
-
-      // This is intentionally a single server-side claim + SDP operation.
-      // The backend performs UPDATE ... WHERE status=waiting before creating
-      // the WebRTC bridge, so simultaneous Answer taps from web and Android
-      // cannot connect two agents/devices to the same transfer.
       final response = await api.post('/call-transfers/$id/connect', data: {'sdp_offer': offer});
       final data = api.unwrap(response);
       final answer = data is Map ? data['sdp_answer']?.toString() : null;
@@ -224,9 +223,6 @@ class CallingService extends ChangeNotifier {
       _startTimer();
       notifyListeners();
     } catch (_) {
-      // A 409 is expected when the same agent answered on another signed-in
-      // surface first. Any failed claim must release this device's microphone
-      // and peer immediately and remove the stale local ringing state.
       if (_matchesTransfer(incomingOffer, id)) incomingOffer = null;
       await _cleanup(status: 'failed');
       rethrow;
@@ -235,14 +231,11 @@ class CallingService extends ChangeNotifier {
     }
   }
 
-  // Declining a team ring is local to this device. It must never call the
-  // transfer hangup endpoint: doing so would terminate the shared caller/team
-  // transfer and prevent rotation to the next agent or another signed-in
-  // surface from answering.
   void dismissIncoming({String? transferId}) {
     if (incomingOffer == null) return;
     if (transferId == null || _matchesTransfer(incomingOffer, transferId)) {
       incomingOffer = null;
+      unawaited(_cancelNativeIncoming());
       notifyListeners();
     }
   }
@@ -305,28 +298,26 @@ class CallingService extends ChangeNotifier {
       case 'call_transfer_waiting':
         if (!state.active) {
           incomingOffer = event.payload;
+          unawaited(_showNativeIncoming(event.payload));
           notifyListeners();
         }
         break;
 
       case 'call_transfer_reassigned':
-        // Rotation timed out for this agent. Stop this surface ringing; the
-        // next target receives a fresh call_transfer_waiting event.
         final incomingId = _transferId(incomingOffer);
         final eventId = _transferId(event.payload);
         if (incomingId != null && (eventId == null || incomingId == eventId)) {
           incomingOffer = null;
+          unawaited(_cancelNativeIncoming());
           notifyListeners();
         }
         break;
 
       case 'call_transfer_connected':
-        // Connected is broadcast before SDP setup completes so every other
-        // web/mobile surface immediately removes its ring. The winning client
-        // keeps its active connecting/answered state.
         final eventId = _transferId(event.payload);
         if (incomingOffer != null && (eventId == null || _matchesTransfer(incomingOffer, eventId))) {
           incomingOffer = null;
+          unawaited(_cancelNativeIncoming());
           notifyListeners();
         }
         break;
@@ -337,6 +328,7 @@ class CallingService extends ChangeNotifier {
         final eventId = _transferId(event.payload);
         if (incomingOffer != null && (eventId == null || _matchesTransfer(incomingOffer, eventId))) {
           incomingOffer = null;
+          unawaited(_cancelNativeIncoming());
         }
         if (state.active && state.transferId != null && (eventId == null || state.transferId == eventId)) {
           unawaited(_cleanup(status: 'ended'));
@@ -367,6 +359,7 @@ class CallingService extends ChangeNotifier {
       case 'outgoing_call_ended':
       case 'call_ended':
         incomingOffer = null;
+        unawaited(_cancelNativeIncoming());
         if (state.active) {
           unawaited(_cleanup(status: 'ended'));
         } else {
@@ -374,6 +367,21 @@ class CallingService extends ChangeNotifier {
         }
         break;
     }
+  }
+
+  Future<void> _showNativeIncoming(Map<String, dynamic> payload) async {
+    try {
+      await _nativePushChannel.invokeMethod<void>('showIncomingCall', {'payload': payload});
+    } catch (_) {
+      // Native call UI is Android-only. Windows and unit tests deliberately
+      // continue using the Flutter call state without failing the event path.
+    }
+  }
+
+  Future<void> _cancelNativeIncoming() async {
+    try {
+      await _nativePushChannel.invokeMethod<void>('cancelIncomingCall');
+    } catch (_) {}
   }
 
   String? _transferId(Map<String, dynamic>? payload) {
@@ -394,6 +402,7 @@ class CallingService extends ChangeNotifier {
   Future<void> _cleanup({required String status}) async {
     _duration?.cancel();
     _duration = null;
+    await _cancelNativeIncoming();
     final peer = _peer;
     _peer = null;
     if (peer != null) await peer.close();
