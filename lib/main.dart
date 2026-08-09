@@ -30,6 +30,14 @@ Future<void> main() async {
     await push.requestNotificationPermission();
   }
 
+  Future<void> deactivateAuthenticatedRuntime() async {
+    // Keep the already-authenticated socket alive until the server has had a
+    // chance to remove this installation's FCM token. This prevents a signed-
+    // out phone from remaining eligible in IVR/team call rotation.
+    await push.unregister();
+    await realtime.disconnect();
+  }
+
   if (session.authenticated) {
     await activateAuthenticatedRuntime();
   }
@@ -37,8 +45,7 @@ Future<void> main() async {
     if (session.authenticated) {
       unawaited(activateAuthenticatedRuntime());
     } else {
-      unawaited(push.unregister());
-      unawaited(realtime.disconnect());
+      unawaited(deactivateAuthenticatedRuntime());
     }
   });
   runApp(WhatomateRoot(api: api, session: session, realtime: realtime, calls: calls));
