@@ -29,6 +29,7 @@ class RealtimeService extends ChangeNotifier {
   bool _closing = false;
   bool connected = false;
   String? currentContactId;
+  Map<String, dynamic>? _pendingPushRegistration;
 
   Future<void> connect() async {
     if (!session.authenticated || connected || _channel != null) return;
@@ -53,6 +54,8 @@ class RealtimeService extends ChangeNotifier {
       _startPing();
       notifyListeners();
       if (currentContactId != null) setCurrentContact(currentContactId);
+      final registration = _pendingPushRegistration;
+      if (registration != null) _sendPushRegistration(registration);
     } catch (_) {
       _channel = null;
       connected = false;
@@ -81,6 +84,36 @@ class RealtimeService extends ChangeNotifier {
     if (channel != null && connected) {
       channel.sink.add(jsonEncode({'type': 'set_contact', 'payload': {'contact_id': contactId}}));
     }
+  }
+
+  Future<void> registerPushToken(
+    String token, {
+    String platform = 'android',
+    String deviceName = 'Android',
+    String appVersion = '0.2.0',
+  }) async {
+    _pendingPushRegistration = {
+      'token': token,
+      'platform': platform,
+      'device_name': deviceName,
+      'app_version': appVersion,
+    };
+    if (!connected) await connect();
+    if (connected) _sendPushRegistration(_pendingPushRegistration!);
+  }
+
+  void _sendPushRegistration(Map<String, dynamic> payload) {
+    _channel?.sink.add(jsonEncode({'type': 'register_push_token', 'payload': payload}));
+  }
+
+  Future<void> unregisterPushToken(String token) async {
+    if (connected) {
+      _channel?.sink.add(jsonEncode({
+        'type': 'unregister_push_token',
+        'payload': {'token': token},
+      }));
+    }
+    if (_pendingPushRegistration?['token'] == token) _pendingPushRegistration = null;
   }
 
   void _startPing() {
