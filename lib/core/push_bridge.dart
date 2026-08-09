@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-import 'api_client.dart';
+import 'realtime.dart';
 import 'session.dart';
 
 class NativeCallAction {
@@ -14,10 +14,10 @@ class NativeCallAction {
 }
 
 class PushBridge extends ChangeNotifier {
-  PushBridge(this.api, this.session);
+  PushBridge(this.session, this.realtime);
 
-  final WhatomateApi api;
   final SessionController session;
+  final RealtimeService realtime;
 
   static const _channel = MethodChannel('uk.nexuscloud.whatomate/push');
   static const _events = EventChannel('uk.nexuscloud.whatomate/push-events');
@@ -51,7 +51,9 @@ class PushBridge extends ChangeNotifier {
       });
       token = result?['token']?.toString();
       configured = result?['configured'] == true;
-      if (token != null && token!.isNotEmpty) await registerToken(token!);
+      if (token != null && token!.isNotEmpty) {
+        await realtime.registerPushToken(token!);
+      }
       final initial = await _channel.invokeMapMethod<String, dynamic>('getInitialCallAction');
       if (initial != null && initial['action'] != null) _emitAction(initial);
       lastError = null;
@@ -68,26 +70,17 @@ class PushBridge extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<void> registerToken(String fcmToken) async {
-    if (!session.authenticated) return;
-    final response = await api.post('/mobile/devices', data: {
-      'token': fcmToken,
-      'platform': 'android',
-      'device_name': 'Android',
-      'app_version': '0.2.0',
-    });
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      token = fcmToken;
-      configured = true;
-      notifyListeners();
-    }
+  Future<void> refreshRegistration() async {
+    final value = token;
+    if (value == null || value.isEmpty || !session.authenticated) return;
+    await realtime.registerPushToken(value);
   }
 
   Future<void> unregister() async {
     final value = token;
     if (value == null || value.isEmpty || !session.authenticated) return;
     try {
-      await api.post('/mobile/devices/unregister', data: {'token': value});
+      await realtime.unregisterPushToken(value);
     } catch (_) {}
   }
 
