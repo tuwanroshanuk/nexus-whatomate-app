@@ -29,6 +29,8 @@ jobs:
           if [ ! -d android ]; then
             flutter create --platforms=android,windows --org uk.nexuscloud .
           fi
+      - name: Apply native Android calling overlay
+        run: python3 tool/android_overlay/apply.py
       - name: Install dependencies
         run: flutter pub get
       - name: Analyze
@@ -36,9 +38,29 @@ jobs:
       - name: Test
         run: flutter test
       - name: Build debug APK
-        run: flutter build apk --debug
+        env:
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          FIREBASE_SENDER_ID: ${{ secrets.FIREBASE_SENDER_ID }}
+        run: |
+          flutter build apk --debug \
+            --dart-define=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
+            --dart-define=FIREBASE_APP_ID="$FIREBASE_APP_ID" \
+            --dart-define=FIREBASE_API_KEY="$FIREBASE_API_KEY" \
+            --dart-define=FIREBASE_SENDER_ID="$FIREBASE_SENDER_ID"
       - name: Build release APK
-        run: flutter build apk --release
+        env:
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          FIREBASE_SENDER_ID: ${{ secrets.FIREBASE_SENDER_ID }}
+        run: |
+          flutter build apk --release \
+            --dart-define=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
+            --dart-define=FIREBASE_APP_ID="$FIREBASE_APP_ID" \
+            --dart-define=FIREBASE_API_KEY="$FIREBASE_API_KEY" \
+            --dart-define=FIREBASE_SENDER_ID="$FIREBASE_SENDER_ID"
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
