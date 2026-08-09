@@ -52,6 +52,9 @@ class PushBridge extends ChangeNotifier {
       token = result?['token']?.toString();
       configured = result?['configured'] == true;
       if (token != null && token!.isNotEmpty) {
+        // registerPushToken waits for the server's authenticated
+        // push_registered acknowledgement, so configured=true alone never
+        // falsely implies that this installation is call-reachable.
         await realtime.registerPushToken(token!);
       }
       final initial = await _channel.invokeMapMethod<String, dynamic>('getInitialCallAction');
@@ -78,10 +81,17 @@ class PushBridge extends ChangeNotifier {
 
   Future<void> unregister() async {
     final value = token;
-    if (value == null || value.isEmpty || !session.authenticated) return;
+    if (value == null || value.isEmpty) return;
     try {
+      // Do not require SessionController.authenticated here. Logout clears
+      // the Flutter session first, but the already-authenticated WebSocket is
+      // deliberately kept alive long enough to remove this device token.
+      // Without this, a signed-out phone could remain in team call rotation.
       await realtime.unregisterPushToken(value);
     } catch (_) {}
+    token = null;
+    configured = false;
+    notifyListeners();
   }
 
   Future<bool> canUseFullScreenIntent() async {
