@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'api_client.dart';
@@ -30,6 +31,7 @@ class RealtimeService extends ChangeNotifier {
   bool connected = false;
   String? currentContactId;
   Map<String, dynamic>? _pendingPushRegistration;
+  Completer<void>? _pushRegistrationAck;
 
   Future<void> connect() async {
     if (!session.authenticated || connected || _channel != null) return;
@@ -43,12 +45,24 @@ class RealtimeService extends ChangeNotifier {
         path: '${root.path.endsWith('/') ? root.path.substring(0, root.path.length - 1) : root.path}/ws',
         query: null,
       );
-      final channel = WebSocketChannel.connect(uri);
+
+      // Native Dart clients do not have browser-origin semantics. Explicitly
+      // send the Whatomate server origin so production WebSocket allowlists
+      // accept Android/Windows clients, while the short-lived ws-token remains
+      // the authoritative authentication mechanism.
+      final channel = IOWebSocketChannel.connect(
+        uri,
+        headers: {'Origin': root.origin},
+      );
       _channel = channel;
       await channel.ready;
       channel.sink.add(jsonEncode({'type': 'auth', 'payload': {'token': token}}));
-      _subscription = channel.stream.listen(_handle,
-          onError: (_) => _lost(), onDone: _lost, cancelOnError: true);
+      _subscription = channel.stream.listen(
+        _handle,
+        onError: (_) => _lost(),
+        onDone: _lost,
+        cancelOnError: true,
+      );
       connected = true;
       _attempt = 0;
       _startPing();
@@ -74,6 +88,10 @@ class RealtimeService extends ChangeNotifier {
           ? Map<String, dynamic>.from(rawPayload)
           : <String, dynamic>{'value': rawPayload};
       if (type == 'pong') return;
+      if (type == 'push_registered' && payload['registered'] == true) {
+        final ack = _pushRegistrationAck;
+        if (ack != null && !ack.isCompleted) ack.complete();
+      }
       _events.add(RealtimeEvent(type, payload));
     } catch (_) {}
   }
@@ -99,7 +117,18 @@ class RealtimeService extends ChangeNotifier {
       'app_version': appVersion,
     };
     if (!connected) await connect();
-    if (connected) _sendPushRegistration(_pendingPushRegistration!);
+    if (!connected || _channel == null) {
+      throw StateError('Realtime connection unavailable; push registration cannot complete');
+    }
+
+    final ack = Completer<void>();
+    _pushRegistrationAck = ack;
+    _sendPushRegistration(_pendingPushRegistration!);
+    try {
+      await ack.future.timeout(const Duration(seconds: 8));
+    } finally {
+      if (identical(_pushRegistrationAck, ack)) _pushRegistrationAck = null;
+    }
   }
 
   void _sendPushRegistration(Map<String, dynamic> payload) {
@@ -128,6 +157,11 @@ class RealtimeService extends ChangeNotifier {
     _subscription = null;
     _ping?.cancel();
     _channel = null;
+    final ack = _pushRegistrationAck;
+    if (ack != null && !ack.isCompleted) {
+      ack.completeError(StateError('Realtime connection lost during push registration'));
+    }
+    _pushRegistrationAck = null;
     if (connected) {
       connected = false;
       notifyListeners();
