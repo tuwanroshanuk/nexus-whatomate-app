@@ -1,7 +1,7 @@
 name: whatomate_app
 description: Official Whatomate Android and Windows client.
 publish_to: "none"
-version: 0.1.0+1
+version: 0.2.0+2
 
 environment:
   sdk: ">=3.8.0 <4.0.0"
@@ -10,6 +10,19 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  dio: ^5.11.0
+  dio_cookie_manager: ^3.5.0
+  cookie_jar: ^4.0.9
+  path_provider: ^2.1.5
+  flutter_secure_storage: ^10.3.1
+  web_socket_channel: ^3.0.3
+  flutter_webrtc: ^1.5.2
+  flutter_contacts: ^2.0.0
+  permission_handler: ^12.0.1
+  file_picker: ^10.3.2
+  image_picker: ^1.2.0
+  url_launcher: ^6.3.2
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:
