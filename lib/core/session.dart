@@ -23,7 +23,8 @@ class SessionController extends ChangeNotifier {
     try {
       final server = await api.savedServer;
       if (server != null && server.isNotEmpty) {
-        await refreshUser();
+        final restored = await refreshUser();
+        if (restored) await ensureAvailableForCalls();
       }
     } catch (_) {
       user = null;
@@ -56,6 +57,7 @@ class SessionController extends ChangeNotifier {
       user = Map<String, dynamic>.from(rawUser);
       final org = organizationId;
       if (org != null) await api.setOrganization(org);
+      await ensureAvailableForCalls();
     } catch (e) {
       error = api.normalize(e).message;
       rethrow;
@@ -93,6 +95,7 @@ class SessionController extends ChangeNotifier {
       final rawUser = data is Map ? data['user'] : null;
       if (rawUser is Map) user = Map<String, dynamic>.from(rawUser);
       await api.setOrganization(organizationId);
+      await ensureAvailableForCalls();
     } finally {
       busy = false;
       notifyListeners();
@@ -107,6 +110,22 @@ class SessionController extends ChangeNotifier {
     return permissions.any((entry) => entry is Map &&
         entry['resource']?.toString() == resource &&
         entry['action']?.toString() == action);
+  }
+
+  // Team call assignment filters agents by is_available before checking
+  // WebSocket/FCM reachability. A signed-in mobile agent therefore needs to be
+  // available just like an agent who has opened the web console. Users can
+  // still turn availability off from the app's More screen when they do not
+  // want calls.
+  Future<void> ensureAvailableForCalls() async {
+    if (!authenticated || user?['is_available'] == true) return;
+    try {
+      await setAvailability(true);
+    } catch (_) {
+      // Login/session restoration must remain usable even if the availability
+      // endpoint is temporarily unavailable. Realtime/push can still connect
+      // and the user can retry from the availability switch.
+    }
   }
 
   Future<void> setAvailability(bool available) async {
