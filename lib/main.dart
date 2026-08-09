@@ -64,12 +64,16 @@ class NativeCallCoordinator {
       if (action.action == 'answer') {
         await calls.acceptTransfer(transfer);
       } else if (action.action == 'decline') {
-        await api.post('/call-transfers/$transferId/hangup', data: {});
+        // Decline is intentionally device-local. A team transfer belongs to
+        // the caller and routing engine, not to one Android installation.
+        // Server-side rotation therefore continues to the next agent while
+        // another signed-in web/mobile surface can still answer.
+        calls.dismissIncoming(transferId: transferId);
       }
     } catch (_) {
-      // A stale native notification may race with another agent accepting a
-      // call. The server owns the authoritative transfer state, so no blind
-      // retry is attempted from the notification tap.
+      // A stale native notification may race with another web/mobile surface
+      // accepting the call. The server owns the authoritative transfer state,
+      // so this device never retries a failed claim blindly.
     } finally {
       _handling = false;
     }
