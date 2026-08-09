@@ -19,15 +19,23 @@ Future<void> main() async {
   final push = PushBridge(session, realtime);
   final coordinator = NativeCallCoordinator(api, session, calls, push);
   await coordinator.start();
-  if (session.authenticated) {
+
+  Future<void> activateAuthenticatedRuntime() async {
+    if (!session.authenticated) return;
     await realtime.connect();
     await push.initialize();
+    // Android 13+ requires POST_NOTIFICATIONS at runtime. This must run after
+    // a fresh login too, not only when the process starts with a restored
+    // session, otherwise FCM can arrive while the call UI remains invisible.
     await push.requestNotificationPermission();
+  }
+
+  if (session.authenticated) {
+    await activateAuthenticatedRuntime();
   }
   session.addListener(() {
     if (session.authenticated) {
-      unawaited(realtime.connect());
-      unawaited(push.initialize());
+      unawaited(activateAuthenticatedRuntime());
     } else {
       unawaited(push.unregister());
       unawaited(realtime.disconnect());
