@@ -166,7 +166,10 @@ class CallingService extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> callPermission(String contactId, String account) async {
-    final response = await api.get('/calls/permission/$contactId', query: {'account': account});
+    final response = await api.get(
+      '/calls/permission/$contactId',
+      query: {'whatsapp_account': account},
+    );
     final data = api.unwrap(response);
     return data is Map ? Map<String, dynamic>.from(data) : {};
   }
