@@ -7,6 +7,7 @@ import 'core/calling.dart';
 import 'core/push_bridge.dart';
 import 'core/realtime.dart';
 import 'core/session.dart';
+import 'ui/call_surface_host.dart';
 import 'ui/root.dart';
 
 Future<void> main() async {
@@ -48,7 +49,19 @@ Future<void> main() async {
       unawaited(deactivateAuthenticatedRuntime());
     }
   });
-  runApp(WhatomateRoot(api: api, session: session, realtime: realtime, calls: calls));
+
+  runApp(
+    CallSurfaceHost(
+      api: api,
+      calls: calls,
+      child: WhatomateRoot(
+        api: api,
+        session: session,
+        realtime: realtime,
+        calls: calls,
+      ),
+    ),
+  );
 }
 
 class NativeCallCoordinator {
@@ -71,6 +84,11 @@ class NativeCallCoordinator {
     if (_handling || !session.authenticated) return;
     _handling = true;
     try {
+      if (action.action == 'hangup') {
+        if (calls.state.active) await calls.hangup();
+        return;
+      }
+
       final transfer = await _resolveTransfer(action.payload);
       if (transfer == null) return;
       final transferId = transfer['id']?.toString();
