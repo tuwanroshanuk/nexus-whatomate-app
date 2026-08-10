@@ -240,6 +240,18 @@ class CallingService extends ChangeNotifier {
     }
   }
 
+  Future<void> declineTransfer(Map<String, dynamic> transfer) async {
+    final id = transfer['id']?.toString() ?? transfer['transfer_id']?.toString();
+    if (id == null || id.isEmpty) throw ApiException('Transfer ID is missing');
+    try {
+      await api.post('/call-transfers/$id/decline', data: {});
+    } finally {
+      // Even if another surface won the race, this Android device must stop
+      // ringing immediately. The server remains authoritative for routing.
+      dismissIncoming(transferId: id);
+    }
+  }
+
   Future<void> toggleMute() async {
     final tracks = _localStream?.getAudioTracks() ?? const <MediaStreamTrack>[];
     if (tracks.isEmpty) return;

@@ -75,6 +75,14 @@ class MainActivity : FlutterActivity(), EventChannel.StreamHandler {
                         CallNotificationHelper.cancelOngoingCall(this)
                         result.success(null)
                     }
+                    "backgroundAfterCallAction" -> {
+                        // Decline may cold-start MainActivity so Flutter can make
+                        // the authenticated server request. Once routing is
+                        // complete, return the task to the background instead of
+                        // stranding the user on the app's Calls tab.
+                        moveTaskToBack(true)
+                        result.success(null)
+                    }
                     "getInitialCallAction" -> result.success(consumeCallAction(intent))
                     "requestNotificationPermission" -> {
                         requestNotificationPermission()

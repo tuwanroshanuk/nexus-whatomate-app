@@ -60,6 +60,10 @@ class DataRepository {
     await api.delete('/contacts/$id');
   }
 
+  Future<void> deleteConversation(String id) async {
+    await api.delete('/contacts/$id/conversation');
+  }
+
   Future<void> assignContact(String id, String? userId) async {
     await api.put('/contacts/$id/assign', data: {'user_id': userId});
   }
@@ -239,6 +243,12 @@ class DataRepository {
       if (search != null && search.isNotEmpty) 'phone': search,
     });
     return _items(r.data, const ['call_logs']);
+  }
+
+  Future<int> clearCallHistory() async {
+    final data = api.unwrap(await api.delete('/call-logs/history'));
+    if (data is Map) return int.tryParse(data['deleted']?.toString() ?? '') ?? 0;
+    return 0;
   }
 
   Future<List<Map<String, dynamic>>> waitingCallTransfers() async {

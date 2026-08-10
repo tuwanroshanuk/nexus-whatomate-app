@@ -90,6 +90,13 @@ class PushBridge extends ChangeNotifier {
     } catch (_) {}
   }
 
+  Future<void> backgroundAfterCallAction() async {
+    if (!supported) return;
+    try {
+      await _channel.invokeMethod<void>('backgroundAfterCallAction');
+    } catch (_) {}
+  }
+
   Future<void> refreshRegistration() async {
     final value = token;
     if (value == null || value.isEmpty || !session.authenticated) return;

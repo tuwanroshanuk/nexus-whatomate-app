@@ -122,17 +122,19 @@ class NativeCallCoordinator {
       if (action.action == 'answer') {
         await calls.acceptTransfer(transfer);
       } else if (action.action == 'decline') {
-        // Decline is intentionally device-local. A team transfer belongs to
-        // the caller and routing engine, not to one Android installation.
-        // Server-side rotation therefore continues to the next agent while
-        // another signed-in web/mobile surface can still answer.
-        calls.dismissIncoming(transferId: transferId);
+        // Decline is now an authoritative routing decision: the server records
+        // this agent as tried and immediately advances the same IVR/team
+        // transfer to another eligible agent without ending the caller leg.
+        await calls.declineTransfer(transfer);
       }
     } catch (_) {
       // A stale native notification may race with another web/mobile surface
       // accepting the call. The server owns the authoritative transfer state,
       // so this device never retries a failed claim blindly.
     } finally {
+      if (action.action == 'decline') {
+        await push.backgroundAfterCallAction();
+      }
       _handling = false;
     }
   }

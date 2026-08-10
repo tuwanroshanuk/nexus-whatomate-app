@@ -261,6 +261,17 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
               trailing: unread > 0 ? Badge(label: Text('$unread')) : const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(
                 repo: widget.repo, realtime: widget.realtime, calls: widget.calls, contact: c))),
+              onLongPress: () async {
+                final ok = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
+                  title: const Text('Clear conversation?'),
+                  content: Text('Clear messages with ${_contactName(c)}? The contact, call permissions, notes, tags and call history will be kept.'),
+                  actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Clear'))],
+                ));
+                if (ok == true) {
+                  try { await widget.repo.deleteConversation(c['id'].toString()); await load(silent: true); }
+                  catch (e) { if (context.mounted) _snack(context, widget.repo.api.normalize(e).message); }
+                }
+              },
             );
           },
         ),
@@ -279,7 +290,24 @@ class _ChatScreenState extends State<ChatScreen> {
   final input = TextEditingController(); final scroll = ScrollController();
   List<Map<String, dynamic>> messages = []; bool loading = true; bool sending = false;
   StreamSubscription<RealtimeEvent>? ws;
+  Map<String, dynamic> callPermission = const {};
+  bool permissionLoading = false;
   String get id => widget.contact['id'].toString();
+  String? get account { final value = widget.contact['whatsapp_account']?.toString(); return value == null || value.isEmpty ? null : value; }
+  bool get serviceWindowOpen {
+    final explicit = widget.contact['service_window_open'];
+    if (explicit is bool) return explicit;
+    final last = DateTime.tryParse(widget.contact['last_inbound_at']?.toString() ?? '');
+    if (last == null) return false;
+    return DateTime.now().difference(last.toLocal()) < const Duration(hours: 24);
+  }
+  String get permissionLabel {
+    final status = callPermission['status']?.toString() ?? '';
+    if (status == 'accepted' || status == 'temporary' || status == 'permanent') return 'Active';
+    if (status == 'pending') return 'Pending';
+    if (status == 'declined') return 'Declined';
+    return 'Not requested';
+  }
 
   @override void initState() { super.initState(); widget.realtime.setCurrentContact(id); load(); ws = widget.realtime.events.listen(_event); }
   @override void dispose() { widget.realtime.setCurrentContact(null); ws?.cancel(); input.dispose(); scroll.dispose(); super.dispose(); }
@@ -292,7 +320,10 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> load({bool silent = false}) async {
     if (!silent) setState(() => loading = true);
     try {
+      final fresh = await widget.repo.contact(id);
+      if (fresh != null) widget.contact.addAll(fresh);
       final data = await widget.repo.messages(id); messages = data;
+      await _refreshCallPermission();
       await widget.repo.markRead(id).catchError((_) {});
       if (mounted) setState(() {});
       WidgetsBinding.instance.addPostFrameCallback((_) => _bottom());
@@ -302,6 +333,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> send() async {
     final text = input.text.trim(); if (text.isEmpty || sending) return;
+    if (!serviceWindowOpen) { _snack(context, '24-hour messaging window is closed. Send an approved template instead.'); await _showTemplates(); return; }
     setState(() => sending = true); input.clear();
     try { messages.add(await widget.repo.sendText(id, text, account: widget.contact['whatsapp_account']?.toString())); setState(() {}); _bottom(); }
     catch (e) { if (mounted) { input.text = text; _snack(context, widget.repo.api.normalize(e).message); } }
@@ -309,6 +341,59 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _bottom() { if (scroll.hasClients) scroll.animateTo(scroll.position.maxScrollExtent, duration: const Duration(milliseconds: 220), curve: Curves.easeOut); }
+
+  Future<void> _refreshCallPermission() async {
+    final a = account; if (a == null) { callPermission = const {}; return; }
+    try { callPermission = await widget.calls.callPermission(id, a); } catch (_) { callPermission = const {}; }
+  }
+
+  Future<void> _requestCallPermission(String method) async {
+    final a = account; if (a == null || permissionLoading) return;
+    setState(() => permissionLoading = true);
+    try {
+      await widget.calls.requestPermission(id, a, method: method);
+      callPermission = const {'status': 'pending'};
+      if (mounted) { setState(() {}); _snack(context, method == 'template' ? 'Call request template sent' : 'Call permission request sent'); }
+    } catch (e) { if (mounted) _snack(context, widget.repo.api.normalize(e).message); }
+    finally { if (mounted) setState(() => permissionLoading = false); }
+  }
+
+  Future<void> _clearConversation() async {
+    final ok = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
+      title: const Text('Clear conversation?'),
+      content: const Text('Messages will be cleared. Contact details, call permissions, tags, notes, assignments and call history will be kept.'),
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Clear'))],
+    ));
+    if (ok != true) return;
+    try { await widget.repo.deleteConversation(id); if (mounted) setState(() => messages = []); }
+    catch (e) { if (mounted) _snack(context, widget.repo.api.normalize(e).message); }
+  }
+
+  Future<void> _showTemplates() async {
+    final a = account;
+    try {
+      final all = await widget.repo.templates(account: a);
+      final approved = all.where((t) {
+        final status = t['status']?.toString().toUpperCase();
+        return status == null || status.isEmpty || status == 'APPROVED';
+      }).toList();
+      if (!mounted) return;
+      if (approved.isEmpty) { _snack(context, 'No approved templates are available'); return; }
+      final selected = await showDialog<Map<String, dynamic>>(context: context, builder: (ctx) => AlertDialog(
+        title: const Text('Send approved template'),
+        content: SizedBox(width: 420, height: 420, child: ListView.separated(
+          itemCount: approved.length, separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (_, i) { final t = approved[i]; return ListTile(title: Text((t['name'] ?? t['template_name'] ?? 'Template').toString()), subtitle: Text((t['category'] ?? t['language'] ?? '').toString()), onTap: () => Navigator.pop(ctx, t)); },
+        )),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel'))],
+      ));
+      if (selected == null) return;
+      final name = (selected['name'] ?? selected['template_name'])?.toString();
+      if (name == null || name.isEmpty) throw ApiException('Template name is missing');
+      await widget.repo.sendTemplate(id, name, account: a);
+      if (mounted) { _snack(context, 'Template sent'); await load(silent: true); }
+    } catch (e) { if (mounted) _snack(context, widget.repo.api.normalize(e).message); }
+  }
 
   Future<void> call() async {
     final account = widget.contact['whatsapp_account']?.toString();
@@ -323,7 +408,7 @@ class _ChatScreenState extends State<ChatScreen> {
           content: const Text('Send a WhatsApp call-permission request first?'),
           actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Send request'))],
         ));
-        if (request == true) { await widget.calls.requestPermission(id, account); if (mounted) _snack(context, 'Call permission request sent'); }
+        if (request == true) { await _requestCallPermission('interactive'); }
         return;
       }
       await widget.calls.makeOutgoingCall(contactId: id, contactName: _contactName(widget.contact), whatsappAccount: account, phone: widget.contact['phone_number']?.toString() ?? '');
@@ -332,15 +417,52 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(_contactName(widget.contact), style: const TextStyle(fontSize: 17)), Text(widget.contact['phone_number']?.toString() ?? '', style: Theme.of(context).textTheme.bodySmall)]),
-      actions: [IconButton(onPressed: call, icon: const Icon(Icons.phone_outlined)), IconButton(onPressed: () => _showContactInfo(context, widget.repo, widget.contact), icon: const Icon(Icons.info_outline))]),
+      actions: [
+        IconButton(onPressed: call, icon: const Icon(Icons.phone_outlined)),
+        PopupMenuButton<String>(
+          onSelected: (value) {
+            if (value == 'permission') _requestCallPermission('interactive');
+            if (value == 'permission_template') _requestCallPermission('template');
+            if (value == 'template') _showTemplates();
+            if (value == 'clear') _clearConversation();
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'permission', child: Text('Request call permission')),
+            PopupMenuItem(value: 'permission_template', child: Text('Send call request template')),
+            PopupMenuItem(value: 'template', child: Text('Send WhatsApp template')),
+            PopupMenuDivider(),
+            PopupMenuItem(value: 'clear', child: Text('Clear conversation')),
+          ],
+        ),
+        IconButton(onPressed: () => _showContactInfo(context, widget.repo, widget.contact), icon: const Icon(Icons.info_outline)),
+      ]),
     body: Column(children: [
+      Material(color: Theme.of(context).colorScheme.surfaceContainerLow, child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(children: [
+          Icon(permissionLabel == 'Active' ? Icons.verified_user_outlined : Icons.shield_outlined, size: 18),
+          const SizedBox(width: 8),
+          Expanded(child: Text('Call permission: $permissionLabel', style: Theme.of(context).textTheme.bodySmall)),
+          if (permissionLabel != 'Active') TextButton(onPressed: permissionLoading ? null : () => _requestCallPermission('interactive'), child: const Text('Request')),
+        ]),
+      )),
+      if (!serviceWindowOpen) Material(color: Theme.of(context).colorScheme.errorContainer, child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(children: [
+          const Icon(Icons.schedule, size: 18), const SizedBox(width: 8),
+          const Expanded(child: Text('24-hour messaging window closed. Use an approved template.')),
+          TextButton(onPressed: _showTemplates, child: const Text('Templates')),
+        ]),
+      )),
       Expanded(child: loading ? const Center(child: CircularProgressIndicator()) : ListView.builder(
         controller: scroll, padding: const EdgeInsets.all(12), itemCount: messages.length,
         itemBuilder: (_, i) => MessageBubble(message: messages[i]),
       )),
       SafeArea(top: false, child: Padding(padding: const EdgeInsets.fromLTRB(10, 6, 10, 10), child: Row(children: [
-        Expanded(child: TextField(controller: input, minLines: 1, maxLines: 5, onSubmitted: (_) => send(), decoration: const InputDecoration(hintText: 'Message', isDense: true))),
-        const SizedBox(width: 8), IconButton.filled(onPressed: sending ? null : send, icon: sending ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send)),
+        Expanded(child: TextField(controller: input, enabled: serviceWindowOpen, minLines: 1, maxLines: 5, onSubmitted: (_) => send(), decoration: InputDecoration(hintText: serviceWindowOpen ? 'Message' : 'Use an approved template', isDense: true))),
+        const SizedBox(width: 8),
+        if (!serviceWindowOpen) IconButton.filled(onPressed: _showTemplates, icon: const Icon(Icons.description_outlined))
+        else IconButton.filled(onPressed: sending ? null : send, icon: sending ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send)),
       ]))),
     ]),
   );
@@ -396,8 +518,13 @@ class _CallsScreenState extends State<CallsScreen>{
   @override void initState(){super.initState();load();ws=widget.realtime.events.listen((e){if(e.type.startsWith('call_')||e.type.startsWith('outgoing_call_'))load(silent:true);});}
   @override void dispose(){ws?.cancel();super.dispose();}
   Future<void> load({bool silent=false})async{if(!silent)setState(()=>loading=true);try{final r=await Future.wait([widget.repo.callLogs(),widget.repo.waitingCallTransfers()]);logs=r[0];waiting=r[1];}catch(e){if(mounted)_snack(context,widget.repo.api.normalize(e).message);}finally{if(mounted)setState(()=>loading=false);}}
-  @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:const Text('Calls'),actions:[IconButton(onPressed:load,icon:const Icon(Icons.refresh))]),body:loading?const Center(child:CircularProgressIndicator()):RefreshIndicator(onRefresh:load,child:ListView(children:[if(waiting.isNotEmpty)...[const _SectionTitle('Incoming / waiting'),...waiting.map((t)=>ListTile(leading:const CircleAvatar(child:Icon(Icons.phone_in_talk)),title:Text((t['contact']?['profile_name']??t['caller_phone']??'Incoming call').toString()),subtitle:Text('Waiting • ${(t['caller_phone']??'').toString()}'),trailing:FilledButton(onPressed:()=>_accept(t),child:const Text('Answer')))),const Divider()],const _SectionTitle('Call history'),if(logs.isEmpty)const Padding(padding:EdgeInsets.all(32),child:Center(child:Text('No call logs'))),...logs.map((log)=>ListTile(leading:Icon(_callIcon(log)),title:Text((log['contact']?['profile_name']??log['caller_phone']??'Unknown').toString()),subtitle:Text('${log['direction']??''} • ${log['status']??''} • ${_duration(_int(log['duration']))}'),trailing:Text(_date(log['started_at']??log['created_at'])),onTap:()=>_jsonDialog(context,'Call details',log)))])));
+  @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:const Text('Calls'),actions:[IconButton(tooltip:'Clear finished history',onPressed:_clearHistory,icon:const Icon(Icons.delete_sweep_outlined)),IconButton(onPressed:load,icon:const Icon(Icons.refresh))]),body:loading?const Center(child:CircularProgressIndicator()):RefreshIndicator(onRefresh:load,child:ListView(children:[if(waiting.isNotEmpty)...[const _SectionTitle('Incoming / waiting'),...waiting.map((t)=>ListTile(leading:const CircleAvatar(child:Icon(Icons.phone_in_talk)),title:Text((t['contact']?['profile_name']??t['caller_phone']??'Incoming call').toString()),subtitle:Text('Waiting • ${(t['caller_phone']??'').toString()}'),trailing:Wrap(spacing:6,children:[FilledButton(onPressed:()=>_accept(t),child:const Text('Answer')),FilledButton.tonal(onPressed:()=>_decline(t),child:const Text('Decline'))]))),const Divider()],const _SectionTitle('Call history'),if(logs.isEmpty)const Padding(padding:EdgeInsets.all(32),child:Center(child:Text('No call logs'))),...logs.map((log)=>ListTile(leading:Icon(_callIcon(log)),title:Text((log['contact']?['profile_name']??log['caller_phone']??'Unknown').toString()),subtitle:Text('${log['direction']??''} • ${log['status']??''} • ${_duration(_int(log['duration']))}'),trailing:Text(_date(log['started_at']??log['created_at'])),onTap:()=>_jsonDialog(context,'Call details',log)))])));
   Future<void> _accept(Map<String,dynamic> t)async{try{await widget.calls.acceptTransfer(t);}catch(e){if(mounted)_snack(context,widget.repo.api.normalize(e).message);}}
+  Future<void> _decline(Map<String,dynamic> t)async{try{await widget.calls.declineTransfer(t);await load(silent:true);if(mounted)_snack(context,'Declined — routing to the next available agent');}catch(e){if(mounted)_snack(context,widget.repo.api.normalize(e).message);}}
+  Future<void> _clearHistory()async{
+    final ok=await showDialog<bool>(context:context,builder:(_)=>AlertDialog(title:const Text('Clear call history?'),content:const Text('Only finished, missed, rejected and failed calls will be cleared. Active calls are never deleted.'),actions:[TextButton(onPressed:()=>Navigator.pop(context,false),child:const Text('Cancel')),FilledButton(onPressed:()=>Navigator.pop(context,true),child:const Text('Clear'))]));
+    if(ok!=true)return;try{final n=await widget.repo.clearCallHistory();await load(silent:true);if(mounted)_snack(context,'Cleared $n finished call record(s)');}catch(e){if(mounted)_snack(context,widget.repo.api.normalize(e).message);}
+  }
 }
 
 class ActiveCallBar extends StatelessWidget {
