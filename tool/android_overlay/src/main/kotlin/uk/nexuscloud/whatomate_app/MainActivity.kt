@@ -112,6 +112,18 @@ class MainActivity : FlutterActivity(), EventChannel.StreamHandler {
         if (eventSink != null) consumeCallAction(intent)?.let { eventSink?.success(it) }
     }
 
+    override fun onDestroy() {
+        // Home/lock-screen do not finish the Activity, so calls continue in the
+        // background. If the user actually finishes the task/activity, ask
+        // Flutter to terminate any active call before the engine is detached.
+        // If Android kills the process too abruptly for this callback, the Go
+        // server's agent PeerConnection disconnect handler ends the call leg.
+        if (isFinishing) {
+            eventSink?.success(mapOf("action" to "hangup", "payload" to emptyMap<String, Any?>()))
+        }
+        super.onDestroy()
+    }
+
     override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
         eventSink = events
     }
