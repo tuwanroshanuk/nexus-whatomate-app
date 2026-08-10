@@ -50,6 +50,31 @@ Future<void> main() async {
     }
   });
 
+  // Mirror active-call state into Android's ongoing call notification. This is
+  // intentionally independent of the Flutter route stack: Home/lock-screen
+  // users still get a persistent way back to the call plus a Hang Up action.
+  String nativeCallSignature = '';
+  void syncNativeCallNotification() {
+    final state = calls.state;
+    if (!state.active) {
+      if (nativeCallSignature.isNotEmpty) {
+        nativeCallSignature = '';
+        unawaited(push.cancelOngoingCall());
+      }
+      return;
+    }
+    final caller = state.contactName.trim().isNotEmpty
+        ? state.contactName.trim()
+        : (state.phone.trim().isNotEmpty ? state.phone.trim() : 'Whatomate call');
+    final status = state.status.replaceAll('_', ' ');
+    final signature = '$caller|$status';
+    if (signature == nativeCallSignature) return;
+    nativeCallSignature = signature;
+    unawaited(push.showOngoingCall(caller: caller, status: status));
+  }
+  calls.addListener(syncNativeCallNotification);
+  syncNativeCallNotification();
+
   runApp(
     CallSurfaceHost(
       api: api,
