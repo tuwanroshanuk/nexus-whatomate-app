@@ -65,6 +65,16 @@ class MainActivity : FlutterActivity(), EventChannel.StreamHandler {
                         CallNotificationHelper.cancelIncomingCall(this)
                         result.success(null)
                     }
+                    "showOngoingCall" -> {
+                        val caller = call.argument<String>("caller").orEmpty()
+                        val status = call.argument<String>("status").orEmpty()
+                        CallNotificationHelper.showOngoingCall(this, caller, status)
+                        result.success(null)
+                    }
+                    "cancelOngoingCall" -> {
+                        CallNotificationHelper.cancelOngoingCall(this)
+                        result.success(null)
+                    }
                     "getInitialCallAction" -> result.success(consumeCallAction(intent))
                     "requestNotificationPermission" -> {
                         requestNotificationPermission()
