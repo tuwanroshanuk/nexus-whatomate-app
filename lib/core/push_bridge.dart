@@ -73,6 +73,23 @@ class PushBridge extends ChangeNotifier {
     } catch (_) {}
   }
 
+  Future<void> showOngoingCall({required String caller, required String status}) async {
+    if (!supported) return;
+    try {
+      await _channel.invokeMethod<void>('showOngoingCall', {
+        'caller': caller,
+        'status': status,
+      });
+    } catch (_) {}
+  }
+
+  Future<void> cancelOngoingCall() async {
+    if (!supported) return;
+    try {
+      await _channel.invokeMethod<void>('cancelOngoingCall');
+    } catch (_) {}
+  }
+
   Future<void> refreshRegistration() async {
     final value = token;
     if (value == null || value.isEmpty || !session.authenticated) return;
