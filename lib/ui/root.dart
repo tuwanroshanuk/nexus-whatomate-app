@@ -313,8 +313,14 @@ class _ChatScreenState extends State<ChatScreen> {
   @override void dispose() { widget.realtime.setCurrentContact(null); ws?.cancel(); input.dispose(); scroll.dispose(); super.dispose(); }
 
   void _event(RealtimeEvent e) {
-    if ((e.type == 'new_message' || e.type == 'status_update' || e.type == 'reaction_update') &&
-        (e.payload['contact_id']?.toString() == id || e.payload['message']?['contact_id']?.toString() == id)) load(silent: true);
+    final eventContactId = e.payload['contact_id']?.toString() ?? e.payload['message']?['contact_id']?.toString();
+    if ((e.type == 'new_message' || e.type == 'status_update' || e.type == 'reaction_update') && eventContactId == id) {
+      load(silent: true);
+      return;
+    }
+    if (e.type == 'call_permission_update' && eventContactId == id) {
+      unawaited(_refreshCallPermission().then((_) { if (mounted) setState(() {}); }));
+    }
   }
 
   Future<void> load({bool silent = false}) async {
