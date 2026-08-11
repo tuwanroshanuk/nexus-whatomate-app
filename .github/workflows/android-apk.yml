@@ -52,6 +52,8 @@ jobs:
           if [ ! -d android ]; then
             flutter create --platforms=android,windows --org uk.nexuscloud .
           fi
+      - name: Apply Flutter feature wiring
+        run: python3 tool/flutter_overlay/apply.py
       - name: Apply native Android calling overlay
         run: python3 tool/android_overlay/apply.py
       - name: Install dependencies
