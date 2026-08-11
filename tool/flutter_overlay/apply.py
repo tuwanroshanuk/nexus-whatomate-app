@@ -14,6 +14,7 @@ text = ROOT_DART.read_text()
 # local and CI builds behave the same way when it is run more than once.
 import_anchor = "import '../core/session.dart';\n"
 imports = (
+    "import 'device_surfaces.dart';\n"
     "import 'full_chat_screen.dart';\n"
     "import 'management_catalog.dart';\n"
 )
@@ -21,6 +22,8 @@ if "import 'full_chat_screen.dart';" not in text:
     if import_anchor not in text:
         raise SystemExit("Could not locate root.dart import anchor")
     text = text.replace(import_anchor, import_anchor + imports, 1)
+elif "import 'device_surfaces.dart';" not in text:
+    text = text.replace("import 'full_chat_screen.dart';\n", "import 'device_surfaces.dart';\nimport 'full_chat_screen.dart';\n", 1)
 
 old_chat = "onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(\n                repo: widget.repo, realtime: widget.realtime, calls: widget.calls, contact: c))),"
 new_chat = "onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FullChatScreen(\n                repo: widget.repo, realtime: widget.realtime, calls: widget.calls, contact: c))),"
@@ -28,6 +31,18 @@ if old_chat in text:
     text = text.replace(old_chat, new_chat, 1)
 elif "FullChatScreen(" not in text:
     raise SystemExit("Could not locate conversation chat route")
+
+contacts_page = "      ContactsScreen(repo: repo, calls: widget.calls),\n"
+if contacts_page in text:
+    text = text.replace(contacts_page, "      EnhancedContactsScreen(repo: repo, calls: widget.calls),\n", 1)
+elif "EnhancedContactsScreen(repo: repo" not in text:
+    raise SystemExit("Could not locate Contacts tab")
+
+dialer_page = "      DialerScreen(repo: repo, calls: widget.calls),\n"
+if dialer_page in text:
+    text = text.replace(dialer_page, "      EnhancedDialerScreen(repo: repo, calls: widget.calls),\n", 1)
+elif "EnhancedDialerScreen(repo: repo" not in text:
+    raise SystemExit("Could not locate Dialer tab")
 
 old_builder = "onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>GenericModuleScreen(repo:repo,module:m)))"
 new_builder = "onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>buildManagementModuleScreen(repo:repo,title:m.title,path:m.path,keys:m.keys,icon:m.icon,single:m.single)))"
