@@ -217,38 +217,29 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
-  int index = 0;
   late final DataRepository repo = DataRepository(widget.api);
+
+  void _open(Widget page) => Navigator.push(context, MaterialPageRoute(builder: (_) => page));
 
   @override
   Widget build(BuildContext context) {
-    final pages = <Widget>[
-      ConversationsScreen(repo: repo, realtime: widget.realtime, calls: widget.calls),
-      EnhancedContactsScreen(repo: repo, calls: widget.calls),
-      EnhancedDialerScreen(repo: repo, calls: widget.calls),
-      EnhancedCallsScreen(repo: repo, calls: widget.calls, realtime: widget.realtime),
-      ToolsHubScreen(repo: repo, session: widget.session, api: widget.api),
-    ];
     return AnimatedBuilder(
       animation: Listenable.merge([widget.calls, widget.realtime]),
       builder: (context, _) => Scaffold(
         body: Stack(children: [
-          IndexedStack(index: index, children: pages),
+          ToolsHubScreen(
+            repo: repo,
+            session: widget.session,
+            api: widget.api,
+            openChats: () => _open(ConversationsScreen(repo: repo, realtime: widget.realtime, calls: widget.calls)),
+            openContacts: () => _open(EnhancedContactsScreen(repo: repo, calls: widget.calls)),
+            openDialer: () => _open(EnhancedDialerScreen(repo: repo, calls: widget.calls)),
+            openCalls: () => _open(EnhancedCallsScreen(repo: repo, calls: widget.calls, realtime: widget.realtime)),
+          ),
           if (widget.calls.state.active)
             Positioned(left: 10, right: 10, bottom: 8,
               child: ActiveCallBar(calls: widget.calls)),
         ]),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: index,
-          onDestinationSelected: (value) => setState(() => index = value),
-          destinations: const [
-            NavigationDestination(icon: Icon(Icons.chat_bubble_outline), selectedIcon: Icon(Icons.chat_bubble), label: 'Chats'),
-            NavigationDestination(icon: Icon(Icons.contacts_outlined), selectedIcon: Icon(Icons.contacts), label: 'Contacts'),
-            NavigationDestination(icon: Icon(Icons.dialpad_outlined), selectedIcon: Icon(Icons.dialpad), label: 'Dialer'),
-            NavigationDestination(icon: Icon(Icons.phone_outlined), selectedIcon: Icon(Icons.phone), label: 'Calls'),
-            NavigationDestination(icon: Icon(Icons.grid_view_outlined), selectedIcon: Icon(Icons.grid_view), label: 'Tools'),
-          ],
-        ),
       ),
     );
   }
@@ -297,16 +288,35 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
               title: Text(_contactName(c), maxLines: 1, overflow: TextOverflow.ellipsis),
               subtitle: Text(c['phone_number']?.toString() ?? '', maxLines: 1),
               trailing: unread > 0 ? Badge(label: Text('$unread')) : const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FullChatScreen(
-                repo: widget.repo, realtime: widget.realtime, calls: widget.calls, contact: c))),
+              onTap: () async {
+                await Navigator.push(context, MaterialPageRoute(builder: (_) => FullChatScreen(
+                  repo: widget.repo, realtime: widget.realtime, calls: widget.calls, contact: c)));
+                await load(silent: true);
+              },
               onLongPress: () async {
-                final ok = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
-                  title: const Text('Clear conversation?'),
-                  content: Text('Clear messages with ${_contactName(c)}? The contact, call permissions, notes, tags and call history will be kept.'),
-                  actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Clear'))],
+                final action = await showModalBottomSheet<String>(context: context, builder: (context) => SafeArea(child: Wrap(children: [
+                  ListTile(leading: const Icon(Icons.delete_sweep_outlined), title: const Text('Delete conversation permanently'), subtitle: const Text('Keep the contact and call history'), onTap: () => Navigator.pop(context, 'conversation')),
+                  ListTile(leading: const Icon(Icons.person_remove_outlined, color: Colors.red), title: const Text('Delete contact permanently', style: TextStyle(color: Colors.red)), subtitle: const Text('Remove all related history'), onTap: () => Navigator.pop(context, 'contact')),
+                  ListTile(leading: const Icon(Icons.close), title: const Text('Cancel'), onTap: () => Navigator.pop(context)),
+                ])));
+                if (!mounted || action == null) return;
+                final deletingContact = action == 'contact';
+                final ok = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+                  title: Text(deletingContact ? 'Permanently delete contact?' : 'Permanently delete conversation?'),
+                  content: Text(deletingContact
+                    ? '${_contactName(c)} and all related messages, calls, notes and permissions will be removed. This cannot be undone.'
+                    : 'All messages, notes and conversation state will be removed. The contact and call history will remain. This cannot be undone.'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+                    FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () => Navigator.pop(context, true), child: const Text('Delete permanently')),
+                  ],
                 ));
                 if (ok == true) {
-                  try { await widget.repo.deleteConversation(c['id'].toString()); await load(silent: true); }
+                  try {
+                    if (deletingContact) { await widget.repo.deleteContact(c['id'].toString()); }
+                    else { await widget.repo.deleteConversation(c['id'].toString()); }
+                    await load(silent: true);
+                  }
                   catch (e) { if (context.mounted) _snack(context, widget.repo.api.normalize(e).message); }
                 }
               },

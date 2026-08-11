@@ -42,6 +42,7 @@ class _FullChatScreenState extends State<FullChatScreen> {
   bool sending = false;
   String? selectedAccount;
   Map<String, dynamic>? replyingTo;
+  Map<String, dynamic> callPermission = const {};
 
   String get contactId => widget.contact['id'].toString();
   String get contactName => (widget.contact['profile_name'] ??
@@ -98,6 +99,7 @@ class _FullChatScreenState extends State<FullChatScreen> {
       users = result[2];
       transfers = result[3];
       _chooseAccount();
+      await _loadCallPermission();
       await widget.repo.markRead(contactId).catchError((_) {});
       if (mounted) setState(() {});
       _scrollBottom();
@@ -124,6 +126,21 @@ class _FullChatScreenState extends State<FullChatScreen> {
       if (mounted) setState(() {});
     } catch (_) {}
   }
+
+  Future<void> _loadCallPermission() async {
+    final account = selectedAccount;
+    if (account == null || account.isEmpty) {
+      callPermission = const {};
+      return;
+    }
+    try {
+      callPermission = await widget.calls.callPermission(contactId, account);
+    } catch (_) {
+      callPermission = const {};
+    }
+  }
+
+  bool get _callAllowed => const {'accepted', 'temporary', 'permanent'}.contains(callPermission['status']?.toString());
 
   void _chooseAccount() {
     if (selectedAccount != null && selectedAccount!.isNotEmpty) return;
@@ -444,6 +461,8 @@ class _FullChatScreenState extends State<FullChatScreen> {
     }
     try {
       final permission = await widget.calls.callPermission(contactId, account);
+      callPermission = permission;
+      if (mounted) setState(() {});
       final status = permission['status']?.toString();
       if (!{'accepted', 'temporary', 'permanent'}.contains(status)) {
         if (!mounted) return;
@@ -460,6 +479,8 @@ class _FullChatScreenState extends State<FullChatScreen> {
         );
         if (request == true) {
           await widget.calls.requestPermission(contactId, account);
+          callPermission = const {'status': 'pending'};
+          if (mounted) setState(() {});
           _snack('Call permission request sent');
         }
         return;
@@ -529,8 +550,8 @@ class _FullChatScreenState extends State<FullChatScreen> {
   Widget _composer() => SafeArea(
     top: false,
     child: Container(
-      color: nexusCream,
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+      color: nexusCream.withValues(alpha: .94),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Row(children: [
           IconButton(tooltip: 'Expand composer', onPressed: _expandComposer, icon: const Icon(Icons.open_in_full, size: 20)),
@@ -554,9 +575,9 @@ class _FullChatScreenState extends State<FullChatScreen> {
             decoration: const InputDecoration(hintText: 'Compose your message', isDense: true),
           )),
           const SizedBox(width: 6),
-          IconButton.filled(
-            style: IconButton.styleFrom(backgroundColor: nexusBlue), onPressed: sending ? null : _sendText,
-            icon: sending ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.send),
+          IconButton(
+            style: IconButton.styleFrom(foregroundColor: Colors.black), onPressed: sending ? null : _sendText,
+            icon: sending ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send_outlined, size: 31),
           ),
         ]),
       ]),
@@ -567,11 +588,11 @@ class _FullChatScreenState extends State<FullChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: nexusBlue,
+        foregroundColor: Colors.white,
+        toolbarHeight: 82,
         titleSpacing: 4,
-        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(contactName, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-          Text(widget.contact['phone_number']?.toString() ?? '', style: Theme.of(context).textTheme.bodySmall),
-        ]),
+        title: const NexusWordmark(onBlue: true, compact: true),
         actions: [
           if (accounts.length > 1)
             PopupMenuButton<String>(
@@ -580,6 +601,7 @@ class _FullChatScreenState extends State<FullChatScreen> {
               initialValue: selectedAccount,
               onSelected: (value) async {
                 setState(() => selectedAccount = value);
+                await _loadCallPermission();
                 await _loadMessages();
               },
               itemBuilder: (_) => [
@@ -587,25 +609,63 @@ class _FullChatScreenState extends State<FullChatScreen> {
                   PopupMenuItem(value: account['name']?.toString(), child: Text(account['name']?.toString() ?? 'Account')),
               ],
             ),
-          IconButton(onPressed: _call, icon: const Icon(Icons.phone_outlined)),
           PopupMenuButton<String>(
             onSelected: (value) {
               switch (value) {
                 case 'assign': _assign();
                 case 'transfer': _transferChatbot();
                 case 'info': _showInfo();
+                case 'delete_conversation': _deleteConversation();
+                case 'delete_contact': _deleteContact();
               }
             },
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'assign', child: Text('Assign agent')),
               PopupMenuItem(value: 'transfer', child: Text(transfers.isEmpty ? 'Transfer to agent queue' : 'Resume chatbot')),
               const PopupMenuItem(value: 'info', child: Text('Contact & notes')),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'delete_conversation', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.delete_sweep_outlined), title: Text('Delete conversation permanently'))),
+              const PopupMenuItem(value: 'delete_contact', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.person_remove_outlined, color: Colors.red), title: Text('Delete contact permanently', style: TextStyle(color: Colors.red)))),
             ],
           ),
         ],
       ),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
+            child: Material(
+              color: nexusPink,
+              borderRadius: BorderRadius.circular(22),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(22),
+                onTap: _call,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                  child: Row(children: [
+                    const Icon(Icons.phone_outlined, size: 29),
+                    const SizedBox(width: 16),
+                    Expanded(child: Text(
+                      _callAllowed ? 'Call Access Allowed' : callPermission['status'] == 'pending' ? 'Call Access Pending' : 'Request Call Access',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    )),
+                    Icon(_callAllowed ? Icons.open_in_new_rounded : Icons.send_outlined),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: Text(contactName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600))),
+              const SizedBox(width: 12),
+              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Text(widget.contact['phone_number']?.toString() ?? '', style: const TextStyle(fontSize: 13)),
+                Text(selectedAccount ?? 'WhatsApp', style: const TextStyle(fontSize: 11, color: Colors.black54)),
+              ]),
+            ]),
+          ),
           if (transfers.isNotEmpty)
             MaterialBanner(
               content: const Text('Agent transfer is active for this conversation.'),
@@ -647,6 +707,43 @@ class _FullChatScreenState extends State<FullChatScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _deleteConversation() async {
+    final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Permanently delete conversation?'),
+      content: const Text('All messages, notes and conversation state will be permanently removed. The contact and call history will remain. This cannot be undone.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () => Navigator.pop(context, true), child: const Text('Delete permanently')),
+      ],
+    ));
+    if (confirmed != true) return;
+    try {
+      await widget.repo.deleteConversation(contactId);
+      if (mounted) setState(() { messages = []; transfers = []; });
+      _snack('Conversation permanently deleted');
+    } catch (e) {
+      if (mounted) _snack(widget.repo.api.normalize(e).message);
+    }
+  }
+
+  Future<void> _deleteContact() async {
+    final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Permanently delete contact?'),
+      content: Text('$contactName and all related messages, notes, transfers, permissions and call history will be permanently removed. This cannot be undone.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () => Navigator.pop(context, true), child: const Text('Delete permanently')),
+      ],
+    ));
+    if (confirmed != true) return;
+    try {
+      await widget.repo.deleteContact(contactId);
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) _snack(widget.repo.api.normalize(e).message);
+    }
   }
 
   Future<void> _showInfo() async {
@@ -752,56 +849,42 @@ class _MessageTile extends StatelessWidget {
     final media = message['media_url'] != null;
     final reactions = message['reactions'];
 
-    return Align(
-      alignment: outgoing ? Alignment.centerRight : Alignment.centerLeft,
-      child: GestureDetector(
-        onLongPress: () => _actions(context),
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 340),
-          margin: const EdgeInsets.symmetric(vertical: 4),
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: outgoing
-                ? Theme.of(context).colorScheme.primaryContainer
-                : Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    final dot = Container(width: 18, height: 18, margin: const EdgeInsets.only(top: 7), decoration: BoxDecoration(color: outgoing ? nexusPink : nexusBlue, shape: BoxShape.circle));
+    final messageBody = Container(
+          constraints: const BoxConstraints(maxWidth: 330),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Column(crossAxisAlignment: outgoing ? CrossAxisAlignment.end : CrossAxisAlignment.start, children: [
             if (message['reply_to_message'] is Map)
               Container(
                 width: double.infinity,
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface.withValues(alpha: .5),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(_preview(Map<String, dynamic>.from(message['reply_to_message'] as Map)),
-                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                decoration: BoxDecoration(color: nexusCream, borderRadius: BorderRadius.circular(8)),
+                child: Text(_preview(Map<String, dynamic>.from(message['reply_to_message'] as Map)), maxLines: 2, overflow: TextOverflow.ellipsis),
               ),
             if (media) _mediaCard(context, type),
             if (type == 'location') _locationCard(context, body),
             if (type == 'contacts') _contactCard(body),
-            if (body.isNotEmpty && type != 'location' && type != 'contacts') Text(body),
+            if (body.isNotEmpty && type != 'location' && type != 'contacts') Text(body, textAlign: outgoing ? TextAlign.right : TextAlign.left, style: const TextStyle(fontSize: 16, height: 1.35)),
             if (body.isEmpty && !media && type != 'location' && type != 'contacts') Text('[$type]'),
             if (message['interactive_data'] is Map) _interactive(context),
             if (reactions is List && reactions.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 5),
-                child: Wrap(spacing: 4, children: [for (final r in reactions) Chip(label: Text((r is Map ? r['emoji'] : r).toString()), visualDensity: VisualDensity.compact)]),
-              ),
+              Padding(padding: const EdgeInsets.only(top: 5), child: Wrap(spacing: 4, children: [for (final r in reactions) Chip(label: Text((r is Map ? r['emoji'] : r).toString()), visualDensity: VisualDensity.compact)])),
             const SizedBox(height: 3),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Text(_time(message['created_at']), style: Theme.of(context).textTheme.labelSmall),
-                if (outgoing) ...[
-                  const SizedBox(width: 4),
-                  Icon(message['status'] == 'read' ? Icons.done_all : Icons.done, size: 14),
-                ],
-              ]),
-            ),
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              Text(_time(message['created_at']), style: Theme.of(context).textTheme.labelSmall),
+              if (outgoing) ...[const SizedBox(width: 4), Icon(message['status'] == 'read' ? Icons.done_all : Icons.done, size: 14)],
+            ]),
           ]),
+        );
+
+    return Align(
+      alignment: outgoing ? Alignment.centerRight : Alignment.centerLeft,
+      child: GestureDetector(
+        onLongPress: () => _actions(context),
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 9),
+          child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: outgoing ? [messageBody, dot] : [dot, messageBody]),
         ),
       ),
     );

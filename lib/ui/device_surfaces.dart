@@ -160,6 +160,26 @@ class _EnhancedContactsScreenState extends State<EnhancedContactsScreen>
     }
   }
 
+  Future<void> _deleteServerContact(Map<String, dynamic> contact) async {
+    final name = _serverName(contact);
+    final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Permanently delete contact?'),
+      content: Text('$name and all related messages, notes, transfers, permissions and call history will be permanently removed. This cannot be undone.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () => Navigator.pop(context, true), child: const Text('Delete permanently')),
+      ],
+    ));
+    if (confirmed != true) return;
+    try {
+      await widget.repo.deleteContact(contact['id'].toString());
+      await _loadServer();
+      if (mounted) _snack('$name permanently deleted');
+    } catch (e) {
+      if (mounted) _snack(widget.repo.api.normalize(e).message);
+    }
+  }
+
   void _snack(String text) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
@@ -299,14 +319,20 @@ class _EnhancedContactsScreenState extends State<EnhancedContactsScreen>
             Text(_serverName(c), style: Theme.of(ctx).textTheme.titleLarge),
             Text(c['phone_number']?.toString() ?? ''),
             const SizedBox(height: 18),
-            FilledButton.icon(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _callServerContact(c);
-              },
-              icon: const Icon(Icons.phone),
-              label: const Text('Call'),
-            ),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              FilledButton.icon(
+                onPressed: () { Navigator.pop(ctx); _callServerContact(c); },
+                icon: const Icon(Icons.phone),
+                label: const Text('Call'),
+              ),
+              const SizedBox(width: 10),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                onPressed: () { Navigator.pop(ctx); _deleteServerContact(c); },
+                icon: const Icon(Icons.person_remove_outlined),
+                label: const Text('Delete'),
+              ),
+            ]),
           ]),
         ),
       ),

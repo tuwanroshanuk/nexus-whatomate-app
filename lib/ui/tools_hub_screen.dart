@@ -8,18 +8,33 @@ import 'dashboard_screen.dart';
 import 'management_catalog.dart';
 
 class ToolsHubScreen extends StatefulWidget {
-  const ToolsHubScreen({super.key, required this.repo, required this.session, required this.api});
+  const ToolsHubScreen({
+    super.key,
+    required this.repo,
+    required this.session,
+    required this.api,
+    required this.openChats,
+    required this.openContacts,
+    required this.openDialer,
+    required this.openCalls,
+  });
+
   final DataRepository repo;
   final SessionController session;
   final WhatomateApi api;
+  final VoidCallback openChats;
+  final VoidCallback openContacts;
+  final VoidCallback openDialer;
+  final VoidCallback openCalls;
 
   @override
   State<ToolsHubScreen> createState() => _ToolsHubScreenState();
 }
 
-class _ToolsHubScreenState extends State<ToolsHubScreen> with SingleTickerProviderStateMixin {
-  late final TabController tabs = TabController(length: 4, vsync: this);
+class _ToolsHubScreenState extends State<ToolsHubScreen> {
+  String selectedGroup = 'Overview';
 
+  static const groups = ['Overview', 'Messaging', 'Automation', 'Calling', 'Insights', 'Manage', 'System'];
   static const modules = <_ToolDef>[
     _ToolDef('Dashboard', '/analytics/dashboard', [], Icons.dashboard_outlined, 'analytics', group: 'Overview', single: true),
     _ToolDef('Campaigns', '/campaigns', ['campaigns'], Icons.campaign_outlined, 'campaigns', group: 'Messaging'),
@@ -65,89 +80,110 @@ class _ToolsHubScreenState extends State<ToolsHubScreen> with SingleTickerProvid
   }
 
   @override
-  void dispose() { tabs.dispose(); super.dispose(); }
+  Widget build(BuildContext context) {
+    final tools = visible.where((tool) => tool.group == selectedGroup).toList();
+    return Scaffold(
+      body: SafeArea(
+        child: CustomScrollView(slivers: [
+          SliverToBoxAdapter(child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 14, 8),
+            child: Row(children: [
+              const NexusWordmark(compact: true),
+              const Spacer(),
+              IconButton(tooltip: 'Sign out', onPressed: widget.session.logout, icon: const Icon(Icons.logout_rounded, size: 29)),
+            ]),
+          )),
+          SliverToBoxAdapter(child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 32, 0, 0),
+            child: Text('Quick Start', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+          )),
+          SliverToBoxAdapter(child: SizedBox(
+            height: 250,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(24, 22, 24, 18),
+              scrollDirection: Axis.horizontal,
+              children: [
+                _ActionCard(title: 'Chats', description: 'View conversations and reply in real time', action: 'View Chats', icon: Icons.chat_bubble_outline_rounded, color: nexusBlue, foreground: Colors.white, onTap: widget.openChats),
+                _ActionCard(title: 'Contacts', description: 'Create and manage customer contacts', action: 'View Contacts', icon: Icons.contacts_outlined, color: nexusPink, foreground: Colors.black, onTap: widget.openContacts),
+                _ActionCard(title: 'Dialer', description: 'Start a WhatsApp voice call', action: 'Open Dialer', icon: Icons.dialpad_rounded, color: const Color(0xffffdf75), foreground: Colors.black, onTap: widget.openDialer),
+                _ActionCard(title: 'Calls', description: 'Incoming calls and complete call history', action: 'View Calls', icon: Icons.phone_in_talk_outlined, color: Colors.black, foreground: Colors.white, onTap: widget.openCalls),
+              ],
+            ),
+          )),
+          SliverToBoxAdapter(child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 18, 24, 10),
+            child: Text('Tools And More', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+          )),
+          SliverToBoxAdapter(child: SizedBox(
+            height: 48,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              scrollDirection: Axis.horizontal,
+              itemCount: groups.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 4),
+              itemBuilder: (_, i) {
+                final group = groups[i];
+                final selected = group == selectedGroup;
+                return TextButton(
+                  style: TextButton.styleFrom(foregroundColor: Colors.black, backgroundColor: selected ? const Color(0xffffdf75) : Colors.transparent),
+                  onPressed: () => setState(() => selectedGroup = group),
+                  child: Text(group, style: TextStyle(fontWeight: selected ? FontWeight.w800 : FontWeight.w500)),
+                );
+              },
+            ),
+          )),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 210, childAspectRatio: 1.28, crossAxisSpacing: 10, mainAxisSpacing: 10),
+              delegate: SliverChildBuilderDelegate((context, i) {
+                final tool = tools[i];
+                return Card(color: i.isEven ? const Color(0xfff5f5f5) : const Color(0xfffff7cf), child: InkWell(
+                  borderRadius: BorderRadius.circular(24), onTap: () => open(tool),
+                  child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Icon(tool.icon, color: Colors.black, size: 27),
+                    const Spacer(),
+                    Text(tool.title, maxLines: 2, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 4),
+                    const Text('Open', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                  ])),
+                ));
+              }, childCount: tools.length),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _ActionCard extends StatelessWidget {
+  const _ActionCard({required this.title, required this.description, required this.action, required this.icon, required this.color, required this.foreground, required this.onTap});
+  final String title, description, action;
+  final IconData icon;
+  final Color color, foreground;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      toolbarHeight: 76,
-      title: const NexusWordmark(compact: true),
-      actions: [IconButton(tooltip: 'Sign out', onPressed: widget.session.logout, icon: const Icon(Icons.logout))],
-      bottom: TabBar(
-        controller: tabs,
-        isScrollable: true,
-        tabAlignment: TabAlignment.start,
-        indicatorColor: nexusBlue,
-        labelColor: Colors.black,
-        unselectedLabelColor: Colors.black54,
-        tabs: const [Tab(text: 'Quick Start'), Tab(text: 'Automation'), Tab(text: 'Manage'), Tab(text: 'System')],
-      ),
-    ),
-    body: TabBarView(controller: tabs, children: [
-      _quickStart(),
-      _toolGrid(visible.where((m) => ['Automation', 'Calling', 'Messaging'].contains(m.group)).toList()),
-      _toolGrid(visible.where((m) => ['Manage', 'Insights', 'Overview'].contains(m.group)).toList()),
-      _toolGrid(visible.where((m) => m.group == 'System').toList()),
-    ]),
-  );
-
-  Widget _quickStart() {
-    final featured = visible.where((m) => const ['Dashboard', 'Campaigns', 'Contacts', 'Chatbot Flows', 'IVR Flows'].contains(m.title)).toList();
-    const colors = [nexusBlue, nexusPink, Color(0xffffdf75), Color(0xffd6f5ff), Color(0xffd8ffc9)];
-    return ListView(padding: const EdgeInsets.fromLTRB(20, 22, 20, 28), children: [
-      Text('Quick Start', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-      const SizedBox(height: 18),
-      SizedBox(height: 214, child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: featured.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 14),
-        itemBuilder: (context, i) {
-          final tool = featured[i]; final dark = i == 0;
-          return SizedBox(width: 265, child: Card(
-            color: colors[i % colors.length],
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-            child: InkWell(borderRadius: BorderRadius.circular(28), onTap: () => open(tool), child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Icon(tool.icon, color: dark ? Colors.white : Colors.black, size: 30),
-                const Spacer(),
-                Text(tool.title, style: TextStyle(color: dark ? Colors.white : Colors.black, fontSize: 25, fontWeight: FontWeight.w500)),
-                const SizedBox(height: 8),
-                Text('Open ${tool.title}', style: TextStyle(color: dark ? Colors.white : Colors.black87, fontSize: 16)),
-              ]),
-            )),
-          ));
-        },
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(right: 14),
+    child: SizedBox(width: 280, child: Card(
+      margin: EdgeInsets.zero,
+      color: color,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      child: InkWell(borderRadius: BorderRadius.circular(28), onTap: onTap, child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [Icon(icon, color: foreground, size: 28), const Spacer(), Icon(Icons.arrow_outward_rounded, color: foreground)]),
+          const Spacer(),
+          Text(title, style: TextStyle(color: foreground, fontSize: 26, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          Text(description, maxLines: 2, style: TextStyle(color: foreground.withValues(alpha: .82), height: 1.25)),
+          const SizedBox(height: 14),
+          Text(action, style: TextStyle(color: foreground, fontWeight: FontWeight.w700)),
+        ]),
       )),
-      const SizedBox(height: 28),
-      Text('Tools And More', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-      const SizedBox(height: 12),
-      _profileCard(),
-      const SizedBox(height: 12),
-      _toolGrid(visible.take(9).toList(), embedded: true),
-    ]);
-  }
-
-  Widget _profileCard() => Card(child: ListTile(
-    contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-    leading: const CircleAvatar(backgroundColor: nexusPink, child: Icon(Icons.person_outline, color: Colors.black)),
-    title: Text(widget.session.displayName),
-    subtitle: Text(widget.session.user?['email']?.toString() ?? ''),
-    trailing: Switch(value: widget.session.user?['is_available'] != false, onChanged: widget.session.setAvailability),
-  ));
-
-  Widget _toolGrid(List<_ToolDef> tools, {bool embedded = false}) => GridView.builder(
-    padding: embedded ? EdgeInsets.zero : const EdgeInsets.all(18),
-    shrinkWrap: embedded,
-    physics: embedded ? const NeverScrollableScrollPhysics() : null,
-    itemCount: tools.length,
-    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 210, childAspectRatio: 1.32, crossAxisSpacing: 10, mainAxisSpacing: 10),
-    itemBuilder: (context, i) { final tool = tools[i]; return Card(child: InkWell(
-      borderRadius: BorderRadius.circular(24), onTap: () => open(tool),
-      child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(tool.icon, color: nexusBlue), const Spacer(), Text(tool.title, maxLines: 2, style: const TextStyle(fontWeight: FontWeight.w600)),
-      ])),
-    )); },
+    )),
   );
 }
 
