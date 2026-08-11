@@ -17,6 +17,7 @@ text = ROOT_DART.read_text()
 import_anchor = "import '../core/session.dart';\n"
 imports = (
     "import 'device_surfaces.dart';\n"
+    "import 'enhanced_calls_screen.dart';\n"
     "import 'full_chat_screen.dart';\n"
     "import 'management_catalog.dart';\n"
 )
@@ -24,8 +25,11 @@ if "import 'full_chat_screen.dart';" not in text:
     if import_anchor not in text:
         raise SystemExit("Could not locate root.dart import anchor")
     text = text.replace(import_anchor, import_anchor + imports, 1)
-elif "import 'device_surfaces.dart';" not in text:
-    text = text.replace("import 'full_chat_screen.dart';\n", "import 'device_surfaces.dart';\nimport 'full_chat_screen.dart';\n", 1)
+else:
+    if "import 'device_surfaces.dart';" not in text:
+        text = text.replace("import 'full_chat_screen.dart';\n", "import 'device_surfaces.dart';\nimport 'full_chat_screen.dart';\n", 1)
+    if "import 'enhanced_calls_screen.dart';" not in text:
+        text = text.replace("import 'full_chat_screen.dart';\n", "import 'enhanced_calls_screen.dart';\nimport 'full_chat_screen.dart';\n", 1)
 
 old_chat = "onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(\n                repo: widget.repo, realtime: widget.realtime, calls: widget.calls, contact: c))),"
 new_chat = "onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FullChatScreen(\n                repo: widget.repo, realtime: widget.realtime, calls: widget.calls, contact: c))),"
@@ -45,6 +49,12 @@ if dialer_page in text:
     text = text.replace(dialer_page, "      EnhancedDialerScreen(repo: repo, calls: widget.calls),\n", 1)
 elif "EnhancedDialerScreen(repo: repo" not in text:
     raise SystemExit("Could not locate Dialer tab")
+
+calls_page = "      CallsScreen(repo: repo, calls: widget.calls, realtime: widget.realtime),\n"
+if calls_page in text:
+    text = text.replace(calls_page, "      EnhancedCallsScreen(repo: repo, calls: widget.calls, realtime: widget.realtime),\n", 1)
+elif "EnhancedCallsScreen(repo: repo" not in text:
+    raise SystemExit("Could not locate Calls tab")
 
 old_builder = "onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>GenericModuleScreen(repo:repo,module:m)))"
 new_builder = "onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>buildManagementModuleScreen(repo:repo,title:m.title,path:m.path,keys:m.keys,icon:m.icon,single:m.single)))"
