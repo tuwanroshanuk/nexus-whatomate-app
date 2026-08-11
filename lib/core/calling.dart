@@ -262,6 +262,28 @@ class CallingService extends ChangeNotifier {
   }
 
   Future<void> setSpeaker(bool enabled) async {
+    final desktop = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.linux ||
+            defaultTargetPlatform == TargetPlatform.macOS);
+    if (desktop) {
+      // Desktop WebRTC has no handset/speakerphone concept and does not
+      // implement enableSpeakerphone. Route to the system's preferred audio
+      // output through the desktop-supported API when Speaker is enabled.
+      if (!enabled) return;
+      final devices = await navigator.mediaDevices.enumerateDevices();
+      final outputs = devices.where((device) => device.kind == 'audiooutput').toList();
+      if (outputs.isEmpty) return;
+      var preferred = outputs.first;
+      for (final output in outputs) {
+        if (output.deviceId == 'default') {
+          preferred = output;
+          break;
+        }
+      }
+      await Helper.selectAudioOutput(preferred.deviceId);
+      return;
+    }
     await Helper.setSpeakerphoneOn(enabled);
   }
 
