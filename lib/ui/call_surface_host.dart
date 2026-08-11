@@ -34,6 +34,7 @@ class _CallSurfaceHostState extends State<CallSurfaceHost>
   bool _busy = false;
   bool _showTransfer = false;
   bool _loadingTeams = false;
+  bool _incomingBusy = false;
   bool _wasActive = false;
   bool _endingFromDetach = false;
   String? _error;
@@ -111,6 +112,36 @@ class _CallSurfaceHostState extends State<CallSurfaceHost>
       _error = widget.api.normalize(e).message;
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _answerIncoming(Map<String, dynamic> transfer) async {
+    if (_incomingBusy) return;
+    setState(() {
+      _incomingBusy = true;
+      _error = null;
+    });
+    try {
+      await widget.calls.acceptTransfer(transfer);
+    } catch (e) {
+      _error = widget.api.normalize(e).message;
+    } finally {
+      if (mounted) setState(() => _incomingBusy = false);
+    }
+  }
+
+  Future<void> _declineIncoming(Map<String, dynamic> transfer) async {
+    if (_incomingBusy) return;
+    setState(() {
+      _incomingBusy = true;
+      _error = null;
+    });
+    try {
+      await widget.calls.declineTransfer(transfer);
+    } catch (e) {
+      _error = widget.api.normalize(e).message;
+    } finally {
+      if (mounted) setState(() => _incomingBusy = false);
     }
   }
 
@@ -201,11 +232,32 @@ class _CallSurfaceHostState extends State<CallSurfaceHost>
   @override
   Widget build(BuildContext context) {
     final active = widget.calls.state.active;
+    final incoming = widget.calls.incomingOffer;
     final media = MediaQueryData.fromView(View.of(context));
     return Stack(
       fit: StackFit.expand,
       children: [
         widget.child,
+        if (!active && incoming != null)
+          MediaQuery(
+            data: media,
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: Theme(
+                data: ThemeData(
+                  useMaterial3: true,
+                  colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff0738f9)),
+                ),
+                child: _IncomingCallScreen(
+                  transfer: incoming,
+                  busy: _incomingBusy,
+                  error: _error,
+                  onAnswer: () => _answerIncoming(incoming),
+                  onDecline: () => _declineIncoming(incoming),
+                ),
+              ),
+            ),
+          ),
         if (active)
           MediaQuery(
             data: media,
@@ -248,6 +300,160 @@ class _CallSurfaceHostState extends State<CallSurfaceHost>
               ),
             ),
           ),
+      ],
+    );
+  }
+}
+
+class _IncomingCallScreen extends StatelessWidget {
+  const _IncomingCallScreen({
+    required this.transfer,
+    required this.busy,
+    required this.error,
+    required this.onAnswer,
+    required this.onDecline,
+  });
+
+  final Map<String, dynamic> transfer;
+  final bool busy;
+  final String? error;
+  final Future<void> Function() onAnswer;
+  final Future<void> Function() onDecline;
+
+  String get caller {
+    final contact = transfer['contact'];
+    if (contact is Map) {
+      final value = contact['profile_name'] ?? contact['name'] ?? contact['phone_number'];
+      if (value != null && value.toString().trim().isNotEmpty) return value.toString();
+    }
+    return (transfer['contact_name'] ??
+            transfer['caller_name'] ??
+            transfer['caller_phone'] ??
+            'Incoming call')
+        .toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = caller;
+    final initial = value.trim().isEmpty ? '?' : value.trim().characters.first.toUpperCase();
+    return Material(
+      color: const Color(0xff0738f9),
+      child: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'INCOMING NEXUS ONE CALL',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 34),
+                  CircleAvatar(
+                    radius: 62,
+                    backgroundColor: const Color(0xffffd4fc),
+                    child: Text(
+                      initial,
+                      style: const TextStyle(
+                        color: Color(0xff111111),
+                        fontSize: 44,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    value,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 30,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    (transfer['caller_phone'] ?? 'WhatsApp voice call').toString(),
+                    style: const TextStyle(color: Colors.white70, fontSize: 16),
+                  ),
+                  if (error != null && error!.isNotEmpty) ...[
+                    const SizedBox(height: 18),
+                    Text(error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
+                  ],
+                  const SizedBox(height: 48),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _IncomingAction(
+                        icon: Icons.call_end,
+                        label: 'Decline',
+                        color: Colors.red,
+                        onPressed: busy ? null : onDecline,
+                      ),
+                      const SizedBox(width: 64),
+                      _IncomingAction(
+                        icon: Icons.call,
+                        label: 'Answer',
+                        color: const Color(0xff20a35a),
+                        onPressed: busy ? null : onAnswer,
+                      ),
+                    ],
+                  ),
+                  if (busy) ...[
+                    const SizedBox(height: 28),
+                    const CircularProgressIndicator(color: Colors.white),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _IncomingAction extends StatelessWidget {
+  const _IncomingAction({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final Future<void> Function()? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(
+          width: 76,
+          height: 76,
+          child: IconButton(
+            onPressed: onPressed,
+            style: IconButton.styleFrom(
+              backgroundColor: color,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: color.withValues(alpha: .45),
+              shape: const CircleBorder(),
+            ),
+            icon: Icon(icon, size: 34),
+          ),
+        ),
+        const SizedBox(height: 9),
+        Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
       ],
     );
   }

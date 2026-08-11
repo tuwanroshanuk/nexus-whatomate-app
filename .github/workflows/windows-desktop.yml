@@ -1,0 +1,101 @@
+name: Build Windows Desktop
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: windows-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Flutter Windows package
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate Windows platform scaffolding
+        shell: pwsh
+        run: |
+          if (-not (Test-Path windows)) {
+            flutter create --platforms=windows --org uk.nexuscloud .
+          }
+      - name: Apply Flutter feature wiring
+        run: python tool/flutter_overlay/apply.py
+      - name: Apply Windows branding
+        run: python tool/windows/apply.py
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+      - name: Test
+        run: flutter test
+      - name: Build Windows release
+        run: flutter build windows --release
+      - name: Create portable and installer packages
+        id: package
+        shell: pwsh
+        run: |
+          $versionLine = Select-String -Path pubspec.yaml -Pattern '^version:\s*' | Select-Object -First 1
+          $version = (($versionLine.Line -replace '^version:\s*', '') -split '\+')[0]
+          $releaseDir = (Resolve-Path 'build\windows\x64\runner\Release').Path
+          $distDir = Join-Path $PWD 'dist'
+          $portableDir = Join-Path $distDir 'Nexus-One-Windows'
+          New-Item -ItemType Directory -Force $portableDir | Out-Null
+          Copy-Item "$releaseDir\*" $portableDir -Recurse -Force
+          $redist = Join-Path $distDir 'vc_redist.x64.exe'
+          Invoke-WebRequest 'https://aka.ms/vs/17/release/vc_redist.x64.exe' -OutFile $redist
+          Copy-Item $redist (Join-Path $portableDir 'vc_redist.x64.exe')
+          @(
+            'Nexus One for Windows'
+            ''
+            'Run whatomate_app.exe to start the app.'
+            'Keep Nexus One running and signed in to receive realtime calls.'
+            'If Windows reports a missing Visual C++ runtime, run vc_redist.x64.exe once.'
+          ) | Set-Content (Join-Path $portableDir 'README.txt')
+          $zipPath = Join-Path $distDir "Nexus-One-Windows-Portable-$version.zip"
+          Compress-Archive -Path "$portableDir\*" -DestinationPath $zipPath -CompressionLevel Optimal
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { throw 'Inno Setup 6 is unavailable on this runner' }
+          & $iscc "/DBuildDir=$releaseDir" "/DRedistPath=$redist" "/DAppVersion=$version" "/DOutputDir=$distDir" 'tool\windows\installer.iss'
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup failed' }
+          $setupPath = Join-Path $distDir "Nexus-One-Windows-Setup-$version.exe"
+          Get-Item $zipPath, $setupPath |
+            Get-FileHash -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash)  $([IO.Path]::GetFileName($_.Path))" } |
+            Set-Content (Join-Path $distDir 'SHA256SUMS.txt')
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - name: Upload Windows packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-one-windows-${{ steps.package.outputs.version }}
+          path: |
+            dist/Nexus-One-Windows-Portable-*.zip
+            dist/Nexus-One-Windows-Setup-*.exe
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish tagged Windows release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/Nexus-One-Windows-Portable-*.zip
+            dist/Nexus-One-Windows-Setup-*.exe
+            dist/SHA256SUMS.txt
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

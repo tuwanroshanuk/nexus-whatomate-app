@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'core/api_client.dart';
 import 'core/calling.dart';
+import 'core/desktop_call_bridge.dart';
 import 'core/push_bridge.dart';
 import 'core/realtime.dart';
 import 'core/session.dart';
@@ -12,11 +13,14 @@ import 'ui/root.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDesktopWindow();
   final api = await WhatomateApi.create();
   final session = SessionController(api);
   await session.bootstrap();
   final realtime = RealtimeService(api, session);
   final calls = CallingService(api, realtime);
+  final desktopCalls = DesktopCallBridge(calls);
+  await desktopCalls.initialize();
   final push = PushBridge(session, realtime);
   final coordinator = NativeCallCoordinator(api, session, calls, push);
   await coordinator.start();
