@@ -69,8 +69,12 @@ class DesktopCallBridge {
         LocalNotificationAction(text: 'Decline'),
       ],
     )
-      ..onClick = () => unawaited(_activateWindow())
-      ..onClickAction = (index) => unawaited(_handleAction(index, incoming));
+      ..onClick = () {
+        unawaited(_activateWindow());
+      }
+      ..onClickAction = (index) {
+        unawaited(_handleAction(index, incoming));
+      };
     unawaited(_notification!.show());
     unawaited(_activateWindow());
   }
