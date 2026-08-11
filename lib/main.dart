@@ -50,30 +50,69 @@ Future<void> main() async {
     }
   });
 
-  // Mirror active-call state into Android's ongoing call notification. This is
-  // intentionally independent of the Flutter route stack: Home/lock-screen
-  // users still get a persistent way back to the call plus a Hang Up action.
+  // Mirror the WebRTC call into Android's persistent notification and Telecom
+  // lifecycle. Telecom is used for OS-level call coordination/audio routing;
+  // the Whatomate backend remains authoritative for signaling and media.
   String nativeCallSignature = '';
-  void syncNativeCallNotification() {
+  String telecomCallIdentity = '';
+  String telecomStatus = '';
+  bool telecomOnHold = false;
+
+  void syncNativeCallSurfaces() {
     final state = calls.state;
     if (!state.active) {
       if (nativeCallSignature.isNotEmpty) {
         nativeCallSignature = '';
         unawaited(push.cancelOngoingCall());
       }
+      if (telecomCallIdentity.isNotEmpty) {
+        telecomCallIdentity = '';
+        telecomStatus = '';
+        telecomOnHold = false;
+        unawaited(push.telecomEndCall());
+      }
       return;
     }
+
     final caller = state.contactName.trim().isNotEmpty
         ? state.contactName.trim()
         : (state.phone.trim().isNotEmpty ? state.phone.trim() : 'Whatomate call');
     final status = state.status.replaceAll('_', ' ');
     final signature = '$caller|$status';
-    if (signature == nativeCallSignature) return;
-    nativeCallSignature = signature;
-    unawaited(push.showOngoingCall(caller: caller, status: status));
+    if (signature != nativeCallSignature) {
+      nativeCallSignature = signature;
+      unawaited(push.showOngoingCall(caller: caller, status: status));
+    }
+
+    final identity = state.callLogId ?? state.transferId ?? '${state.direction}:$caller';
+    if (telecomCallIdentity.isEmpty) {
+      telecomCallIdentity = identity;
+      telecomStatus = state.status;
+      telecomOnHold = state.onHold;
+      // Incoming calls are registered by the FCM/realtime native call path
+      // before the user answers. Outgoing calls originate in Flutter, so they
+      // must be introduced to Telecom here.
+      if (state.direction == 'outgoing') {
+        unawaited(push.reportOutgoingTelecomCall(caller: caller, address: state.phone));
+      }
+    }
+
+    if (state.status == 'answered' && telecomStatus != 'answered') {
+      unawaited(push.telecomSetActive());
+    }
+    if (state.onHold != telecomOnHold) {
+      if (state.onHold) {
+        unawaited(push.telecomSetInactive());
+      } else {
+        unawaited(push.telecomSetActive());
+      }
+      telecomOnHold = state.onHold;
+    }
+    telecomStatus = state.status;
   }
-  calls.addListener(syncNativeCallNotification);
-  syncNativeCallNotification();
+
+  calls.addListener(syncNativeCallSurfaces);
+  syncNativeCallSurfaces();
 
   runApp(
     CallSurfaceHost(
@@ -111,6 +150,14 @@ class NativeCallCoordinator {
     try {
       if (action.action == 'hangup') {
         if (calls.state.active) await calls.hangup();
+        return;
+      }
+      if (action.action == 'hold') {
+        if (calls.state.active && !calls.state.onHold) await calls.hold();
+        return;
+      }
+      if (action.action == 'resume') {
+        if (calls.state.active && calls.state.onHold) await calls.resume();
         return;
       }
 
