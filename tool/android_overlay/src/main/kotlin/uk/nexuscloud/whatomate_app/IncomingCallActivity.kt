@@ -31,6 +31,7 @@ class IncomingCallActivity : Activity() {
         super.onCreate(savedInstanceState)
         setShowWhenLocked(true)
         setTurnScreenOn(true)
+        TelecomCallBridge.initialize(this)
 
         val directAction = intent.getStringExtra(EXTRA_ACTION)
         if (directAction == "answer") {
@@ -38,6 +39,7 @@ class IncomingCallActivity : Activity() {
             return
         }
         if (directAction == "decline") {
+            TelecomCallBridge.declineFromApp()
             launchFlutter("decline")
             return
         }
@@ -75,7 +77,10 @@ class IncomingCallActivity : Activity() {
         }
         val decline = Button(this).apply {
             text = "Decline"
-            setOnClickListener { launchFlutter("decline") }
+            setOnClickListener {
+                TelecomCallBridge.declineFromApp()
+                launchFlutter("decline")
+            }
         }
         val answer = Button(this).apply {
             text = "Answer"
@@ -91,6 +96,7 @@ class IncomingCallActivity : Activity() {
 
     private fun answerWithPermission() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            TelecomCallBridge.answerFromApp()
             launchFlutter("answer")
             return
         }
@@ -110,6 +116,7 @@ class IncomingCallActivity : Activity() {
         if (requestCode != MICROPHONE_PERMISSION_REQUEST || !pendingAnswer) return
         pendingAnswer = false
         if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            TelecomCallBridge.answerFromApp()
             launchFlutter("answer")
         } else {
             subtitleView?.text = "Microphone permission denied — enable it to answer calls"
