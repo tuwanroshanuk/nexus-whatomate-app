@@ -41,7 +41,7 @@ Name: "startup"; Description: "Start Nexus One when I sign in (recommended for r
 
 [Files]
 Source: "{#BuildDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "{#RedistPath}"; DestDir: "{tmp}"; DestName: "vc_redist.x64.exe"; Flags: deleteafter
+Source: "{#RedistPath}"; DestDir: "{tmp}"; DestName: "vc_redist.x64.exe"; Flags: ignoreversion deleteafterinstall
 
 [Icons]
 Name: "{autoprograms}\Nexus One"; Filename: "{app}\whatomate_app.exe"
