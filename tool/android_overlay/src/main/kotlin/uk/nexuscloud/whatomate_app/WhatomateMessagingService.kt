@@ -6,6 +6,7 @@ import com.google.firebase.messaging.RemoteMessage
 class WhatomateMessagingService : FirebaseMessagingService() {
     override fun onCreate() {
         FirebaseBootstrap.ensure(this)
+        TelecomCallBridge.initialize(this)
         CallNotificationHelper.createCallChannel(this)
         super.onCreate()
     }
@@ -21,13 +22,19 @@ class WhatomateMessagingService : FirebaseMessagingService() {
         val payload = message.data["payload"] ?: "{}"
 
         when (event) {
-            "call_transfer_waiting" -> CallNotificationHelper.showIncomingCall(this, payload)
-            "call_transfer_connected",
+            "call_transfer_waiting" -> {
+                TelecomCallBridge.reportIncoming(this, payload)
+                CallNotificationHelper.showIncomingCall(this, payload)
+            }
+            "call_transfer_connected" -> CallNotificationHelper.cancelIncomingCall(this)
             "call_transfer_completed",
             "call_transfer_abandoned",
             "call_transfer_no_answer",
             "call_transfer_reassigned",
-            "call_ended" -> CallNotificationHelper.cancelIncomingCall(this)
+            "call_ended" -> {
+                CallNotificationHelper.cancelIncomingCall(this)
+                TelecomCallBridge.endFromServer()
+            }
         }
     }
 }
