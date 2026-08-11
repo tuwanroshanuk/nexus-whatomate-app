@@ -3,6 +3,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ROOT_DART = ROOT / "lib" / "ui" / "root.dart"
+ADMIN_DART = ROOT / "lib" / "ui" / "admin_module_screen.dart"
+CATALOG_DART = ROOT / "lib" / "ui" / "management_catalog.dart"
 
 if not ROOT_DART.exists():
     raise SystemExit("lib/ui/root.dart is missing")
@@ -66,4 +68,41 @@ if "ModuleDef('Profile'" not in text:
     text = text.replace(module_anchor, module_anchor + extra_modules, 1)
 
 ROOT_DART.write_text(text)
+
+# Related resources often have their own `id`. Preserve the parent ID under a
+# distinct token so /campaigns/{parent_id}/recipients/{id} and similar routes
+# never accidentally substitute the child ID into the parent slot.
+if ADMIN_DART.exists():
+    admin = ADMIN_DART.read_text()
+    admin = admin.replace(
+        "final values = {...widget.parent, ...?item};",
+        "final values = {'parent_id': widget.parent['id'], ...widget.parent, ...?item};",
+    )
+    ADMIN_DART.write_text(admin)
+
+if CATALOG_DART.exists():
+    catalog = CATALOG_DART.read_text()
+    catalog = catalog.replace(
+        "if (title == 'SSO Settings') return _SSOSettingsScreen(repo: repo);\n  if (single)",
+        "if (title == 'SSO Settings') return _SSOSettingsScreen(repo: repo);\n  if (title == 'Agent Analytics') return _ServerDataScreen(repo: repo, title: title, path: path);\n  if (single)",
+    )
+    catalog = catalog.replace(
+        "deletePath: '/campaigns/{id}/recipients/{recipient_id}',\n            idField: 'recipient_id',",
+        "deletePath: '/campaigns/{parent_id}/recipients/{id}',\n            idField: 'id',",
+    )
+    catalog = catalog.replace(
+        "deletePath: '/teams/{id}/members/{user_id}',",
+        "deletePath: '/teams/{parent_id}/members/{user_id}',",
+    )
+    catalog = catalog.replace(
+        "editableKeys: ['name', 'retailer_id', 'description', 'price', 'currency', 'image_url', 'url', 'availability'],\n          ),",
+        "editableKeys: ['name', 'retailer_id', 'description', 'price', 'currency', 'image_url', 'url', 'availability'],\n            updatePath: '/products/{id}',\n            deletePath: '/products/{id}',\n          ),",
+    )
+    catalog = catalog.replace(
+        "editableKeys: const ['name', 'description', 'type', 'url', 'method', 'headers', 'body', 'script', 'icon', 'is_active'],\n      );",
+        "editableKeys: const ['name', 'description', 'type', 'url', 'method', 'headers', 'body', 'script', 'icon', 'is_active'],\n        actions: const [ModuleAction('Execute', '/{id}/execute', icon: Icons.play_arrow)],\n      );",
+        1,
+    )
+    CATALOG_DART.write_text(catalog)
+
 print("Applied Whatomate Flutter feature wiring overlay")
