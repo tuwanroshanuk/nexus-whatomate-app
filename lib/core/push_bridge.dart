@@ -90,6 +90,37 @@ class PushBridge extends ChangeNotifier {
     } catch (_) {}
   }
 
+  Future<void> reportOutgoingTelecomCall({required String caller, required String address}) async {
+    if (!supported) return;
+    try {
+      await _channel.invokeMethod<void>('reportOutgoingTelecomCall', {
+        'caller': caller,
+        'address': address,
+      });
+    } catch (_) {}
+  }
+
+  Future<void> telecomSetActive() async {
+    if (!supported) return;
+    try {
+      await _channel.invokeMethod<void>('telecomSetActive');
+    } catch (_) {}
+  }
+
+  Future<void> telecomSetInactive() async {
+    if (!supported) return;
+    try {
+      await _channel.invokeMethod<void>('telecomSetInactive');
+    } catch (_) {}
+  }
+
+  Future<void> telecomEndCall() async {
+    if (!supported) return;
+    try {
+      await _channel.invokeMethod<void>('telecomEndCall');
+    } catch (_) {}
+  }
+
   Future<void> backgroundAfterCallAction() async {
     if (!supported) return;
     try {
