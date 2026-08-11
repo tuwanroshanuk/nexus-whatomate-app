@@ -17,8 +17,9 @@ native_dst = APP / "src" / "main" / "kotlin"
 if native_src.exists():
     shutil.copytree(native_src, native_dst, dirs_exist_ok=True)
 
-# Patch Gradle with Firebase Messaging. Manual FirebaseOptions initialization means
-# no google-services.json or Google Services Gradle plugin is required.
+# Patch Gradle with Firebase Messaging and Android Core-Telecom. Manual
+# FirebaseOptions initialization means no google-services.json or Google
+# Services Gradle plugin is required.
 gradle_path = APP / "build.gradle.kts"
 gradle = gradle_path.read_text()
 marker = "flutter {\n"
@@ -26,6 +27,7 @@ deps = '''dependencies {
     implementation(platform("com.google.firebase:firebase-bom:34.16.0"))
     implementation("com.google.firebase:firebase-messaging")
     implementation("androidx.core:core-ktx:1.17.0")
+    implementation("androidx.core:core-telecom:1.0.0")
 }
 
 '''
@@ -33,7 +35,13 @@ if "com.google.firebase:firebase-messaging" not in gradle:
     if marker not in gradle:
         raise SystemExit("Could not find Flutter Gradle marker")
     gradle = gradle.replace(marker, deps + marker, 1)
-    gradle_path.write_text(gradle)
+elif "androidx.core:core-telecom" not in gradle:
+    gradle = gradle.replace(
+        '    implementation("androidx.core:core-ktx:1.17.0")\n',
+        '    implementation("androidx.core:core-ktx:1.17.0")\n    implementation("androidx.core:core-telecom:1.0.0")\n',
+        1,
+    )
+gradle_path.write_text(gradle)
 
 manifest_path = APP / "src" / "main" / "AndroidManifest.xml"
 ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
@@ -52,6 +60,7 @@ permissions = [
     "android.permission.VIBRATE",
     "android.permission.FOREGROUND_SERVICE",
     "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+    "android.permission.MANAGE_OWN_CALLS",
 ]
 existing_permissions = {
     p.get(ANDROID_NS + "name") for p in root.findall("uses-permission")
