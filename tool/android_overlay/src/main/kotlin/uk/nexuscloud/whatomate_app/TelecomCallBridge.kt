@@ -70,9 +70,7 @@ object TelecomCallBridge {
             address = Uri.parse("whatomate:${Uri.encode(address.ifBlank { caller })}"),
             direction = if (isIncoming) CallAttributesCompat.DIRECTION_INCOMING else CallAttributesCompat.DIRECTION_OUTGOING,
             callType = CallAttributesCompat.CALL_TYPE_AUDIO_CALL,
-            callCapabilitiesCompat = CallAttributesCompat.CallCapability(
-                supportsSetInactive = CallAttributesCompat.SUPPORTS_SET_INACTIVE,
-            ),
+            callCapabilities = CallAttributesCompat.SUPPORTS_SET_INACTIVE,
         )
 
         launchSuspend {
