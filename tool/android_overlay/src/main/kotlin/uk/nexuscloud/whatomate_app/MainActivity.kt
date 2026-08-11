@@ -29,6 +29,7 @@ class MainActivity : FlutterActivity(), EventChannel.StreamHandler {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        TelecomCallBridge.initialize(this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -58,7 +59,9 @@ class MainActivity : FlutterActivity(), EventChannel.StreamHandler {
                     }
                     "showIncomingCall" -> {
                         val payload = call.argument<Map<String, Any?>>("payload") ?: emptyMap()
-                        CallNotificationHelper.showIncomingCall(this, JSONObject(payload).toString())
+                        val encoded = JSONObject(payload).toString()
+                        TelecomCallBridge.reportIncoming(this, encoded)
+                        CallNotificationHelper.showIncomingCall(this, encoded)
                         result.success(null)
                     }
                     "cancelIncomingCall" -> {
@@ -73,6 +76,26 @@ class MainActivity : FlutterActivity(), EventChannel.StreamHandler {
                     }
                     "cancelOngoingCall" -> {
                         CallNotificationHelper.cancelOngoingCall(this)
+                        result.success(null)
+                    }
+                    "reportOutgoingTelecomCall" -> {
+                        TelecomCallBridge.reportOutgoing(
+                            this,
+                            call.argument<String>("caller").orEmpty(),
+                            call.argument<String>("address").orEmpty(),
+                        )
+                        result.success(null)
+                    }
+                    "telecomSetActive" -> {
+                        TelecomCallBridge.setActiveFromApp()
+                        result.success(null)
+                    }
+                    "telecomSetInactive" -> {
+                        TelecomCallBridge.setInactiveFromApp()
+                        result.success(null)
+                    }
+                    "telecomEndCall" -> {
+                        TelecomCallBridge.endFromApp()
                         result.success(null)
                     }
                     "backgroundAfterCallAction" -> {
