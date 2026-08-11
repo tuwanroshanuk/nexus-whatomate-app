@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/calling.dart';
 import '../core/data_repository.dart';
 import '../core/realtime.dart';
+import 'branding.dart';
 
 class FullChatScreen extends StatefulWidget {
   const FullChatScreen({
@@ -478,6 +479,90 @@ class _FullChatScreenState extends State<FullChatScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  void _format(String before, String after) {
+    final selection = input.selection;
+    final text = input.text;
+    final start = selection.isValid ? selection.start.clamp(0, text.length) : text.length;
+    final end = selection.isValid ? selection.end.clamp(0, text.length) : text.length;
+    final selected = text.substring(start, end);
+    final replacement = '$before$selected$after';
+    input.value = TextEditingValue(
+      text: text.replaceRange(start, end, replacement),
+      selection: TextSelection(baseOffset: start + before.length, extentOffset: start + before.length + selected.length),
+    );
+    setState(() {});
+  }
+
+  Future<void> _expandComposer() async {
+    final expanded = TextEditingController(text: input.text)
+      ..selection = input.selection.isValid ? input.selection : TextSelection.collapsed(offset: input.text.length);
+    final send = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog.fullscreen(child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(onPressed: () => Navigator.pop(context, false), icon: const Icon(Icons.close)),
+          title: const Text('Compose Message'),
+          actions: [TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Done'))],
+        ),
+        body: SafeArea(child: Column(children: [
+          _FormattingToolbar(controller: expanded, onChanged: () => setState(() {})),
+          Expanded(child: Padding(padding: const EdgeInsets.all(20), child: TextField(
+            controller: expanded, autofocus: true, expands: true, minLines: null, maxLines: null,
+            textAlignVertical: TextAlignVertical.top,
+            decoration: const InputDecoration(hintText: 'Compose your message', border: InputBorder.none),
+          ))),
+          Padding(padding: const EdgeInsets.all(16), child: SizedBox(width: double.infinity, child: FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: nexusBlue),
+            onPressed: () => Navigator.pop(context, true), icon: const Icon(Icons.check), label: const Text('Use message'),
+          ))),
+        ])),
+      )),
+    );
+    if (send == true) {
+      input.value = expanded.value;
+      setState(() {});
+    }
+    expanded.dispose();
+  }
+
+  Widget _composer() => SafeArea(
+    top: false,
+    child: Container(
+      color: nexusCream,
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Row(children: [
+          IconButton(tooltip: 'Expand composer', onPressed: _expandComposer, icon: const Icon(Icons.open_in_full, size: 20)),
+          IconButton(tooltip: 'Bold', onPressed: () => _format('*', '*'), icon: const Icon(Icons.format_bold, size: 20)),
+          IconButton(tooltip: 'Italic', onPressed: () => _format('_', '_'), icon: const Icon(Icons.format_italic, size: 20)),
+          IconButton(tooltip: 'Strikethrough', onPressed: () => _format('~', '~'), icon: const Icon(Icons.format_strikethrough, size: 20)),
+          IconButton(tooltip: 'Monospace', onPressed: () => _format('```', '```'), icon: const Icon(Icons.code, size: 20)),
+        ]),
+        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.add_circle_outline),
+            onSelected: (value) { if (value == 'media') _attach(); if (value == 'template') _pickTemplate(); if (value == 'canned') _pickCanned(); },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'media', child: ListTile(leading: Icon(Icons.attach_file), title: Text('Photo, video, audio or document'))),
+              PopupMenuItem(value: 'template', child: ListTile(leading: Icon(Icons.description_outlined), title: Text('WhatsApp template'))),
+              PopupMenuItem(value: 'canned', child: ListTile(leading: Icon(Icons.quickreply_outlined), title: Text('Canned response'))),
+            ],
+          ),
+          Expanded(child: TextField(
+            controller: input, minLines: 1, maxLines: 6, onSubmitted: (_) => _sendText(),
+            decoration: const InputDecoration(hintText: 'Compose your message', isDense: true),
+          )),
+          const SizedBox(width: 6),
+          IconButton.filled(
+            style: IconButton.styleFrom(backgroundColor: nexusBlue), onPressed: sending ? null : _sendText,
+            icon: sending ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.send),
+          ),
+        ]),
+      ]),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -558,43 +643,7 @@ class _FullChatScreenState extends State<FullChatScreen> {
                 IconButton(onPressed: () => setState(() => replyingTo = null), icon: const Icon(Icons.close, size: 18)),
               ]),
             ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(6, 6, 8, 8),
-              child: Row(children: [
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.add_circle_outline),
-                  onSelected: (value) {
-                    if (value == 'media') _attach();
-                    if (value == 'template') _pickTemplate();
-                    if (value == 'canned') _pickCanned();
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'media', child: ListTile(leading: Icon(Icons.attach_file), title: Text('Photo, video, audio or document'))),
-                    PopupMenuItem(value: 'template', child: ListTile(leading: Icon(Icons.description_outlined), title: Text('WhatsApp template'))),
-                    PopupMenuItem(value: 'canned', child: ListTile(leading: Icon(Icons.quickreply_outlined), title: Text('Canned response'))),
-                  ],
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: input,
-                    minLines: 1,
-                    maxLines: 5,
-                    onSubmitted: (_) => _sendText(),
-                    decoration: const InputDecoration(hintText: 'Message', isDense: true),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                IconButton.filled(
-                  onPressed: sending ? null : _sendText,
-                  icon: sending
-                      ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.send),
-                ),
-              ]),
-            ),
-          ),
+          _composer(),
         ],
       ),
     );
@@ -654,6 +703,30 @@ class _FullChatScreenState extends State<FullChatScreen> {
     );
     note.dispose();
   }
+}
+
+class _FormattingToolbar extends StatefulWidget {
+  const _FormattingToolbar({required this.controller, required this.onChanged});
+  final TextEditingController controller;
+  final VoidCallback onChanged;
+  @override State<_FormattingToolbar> createState() => _FormattingToolbarState();
+}
+
+class _FormattingToolbarState extends State<_FormattingToolbar> {
+  void wrap(String before, String after) {
+    final text = widget.controller.text; final selection = widget.controller.selection;
+    final start = selection.isValid ? selection.start.clamp(0, text.length) : text.length;
+    final end = selection.isValid ? selection.end.clamp(0, text.length) : text.length;
+    final selected = text.substring(start, end);
+    widget.controller.value = TextEditingValue(text: text.replaceRange(start, end, '$before$selected$after'), selection: TextSelection(baseOffset: start + before.length, extentOffset: start + before.length + selected.length));
+    widget.onChanged(); setState(() {});
+  }
+  @override Widget build(BuildContext context) => Container(color: nexusCream, child: Row(children: [
+    IconButton(onPressed: () => wrap('*', '*'), icon: const Icon(Icons.format_bold)),
+    IconButton(onPressed: () => wrap('_', '_'), icon: const Icon(Icons.format_italic)),
+    IconButton(onPressed: () => wrap('~', '~'), icon: const Icon(Icons.format_strikethrough)),
+    IconButton(onPressed: () => wrap('```', '```'), icon: const Icon(Icons.code)),
+  ]));
 }
 
 class _MessageTile extends StatelessWidget {

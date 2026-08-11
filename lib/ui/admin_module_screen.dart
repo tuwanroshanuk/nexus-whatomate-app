@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
 import '../core/data_repository.dart';
+import 'flow_graph_editor.dart';
 
 class ModuleAction {
   const ModuleAction(this.label, this.pathSuffix, {this.method = 'POST', this.icon = Icons.play_arrow, this.body = const {}});
@@ -381,7 +382,7 @@ class _RelatedCollectionScreenState extends State<RelatedCollectionScreen> {
 
   String expand(String template, [Map<String, dynamic>? item]) {
     var result = template;
-    final values = {...widget.parent, ...?item};
+    final values = {'parent_id': widget.parent['id'], ...widget.parent, ...?item};
     for (final e in values.entries) {
       result = result.replaceAll('{${e.key}}', Uri.encodeComponent(e.value?.toString() ?? ''));
     }
@@ -503,6 +504,7 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
   final controllers = <String, TextEditingController>{};
   final boolValues = <String, bool>{};
   bool saving = false;
+  bool get isFlowGraph => controllers.containsKey('nodes') && controllers.containsKey('edges');
 
   @override
   void initState() {
@@ -579,6 +581,21 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
         if (keys.isEmpty)
           const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('This endpoint has no editable fields configured.'))),
         for (final key in keys)
+          if (isFlowGraph && key == 'nodes')
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: FlowGraphEditor(
+                nodesJson: controllers['nodes']?.text ?? '[]',
+                edgesJson: controllers['edges']?.text ?? '[]',
+                onChanged: (nodes, edges) {
+                  controllers['nodes']?.text = const JsonEncoder.withIndent('  ').convert(nodes);
+                  controllers['edges']?.text = const JsonEncoder.withIndent('  ').convert(edges);
+                },
+              ),
+            )
+          else if (isFlowGraph && key == 'edges')
+            const SizedBox.shrink()
+          else
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: boolValues.containsKey(key)

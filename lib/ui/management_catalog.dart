@@ -24,6 +24,7 @@ Widget buildManagementModuleScreen({
   }
   if (title == 'Profile') return _ProfileScreen(repo: repo);
   if (title == 'SSO Settings') return _SSOSettingsScreen(repo: repo);
+  if (title == 'Agent Analytics') return _ServerDataScreen(repo: repo, title: title, path: path);
   if (single) return _ServerDataScreen(repo: repo, title: title, path: path);
 
   return AdminModuleScreen(
@@ -85,8 +86,8 @@ ApiModule _moduleFor(String title, String path, List<String> keys, IconData icon
             label: 'Recipients',
             listPath: '/campaigns/{id}/recipients',
             keys: ['recipients'],
-            deletePath: '/campaigns/{id}/recipients/{recipient_id}',
-            idField: 'recipient_id',
+            deletePath: '/campaigns/{parent_id}/recipients/{id}',
+            idField: 'id',
           ),
         ],
       );
@@ -180,7 +181,7 @@ ApiModule _moduleFor(String title, String path, List<String> keys, IconData icon
             listPath: '/teams/{id}/members',
             keys: ['members'],
             createPath: '/teams/{id}/members',
-            deletePath: '/teams/{id}/members/{user_id}',
+            deletePath: '/teams/{parent_id}/members/{user_id}',
             seed: {'user_id': ''},
             editableKeys: ['user_id'],
             idField: 'user_id',
@@ -232,6 +233,7 @@ ApiModule _moduleFor(String title, String path, List<String> keys, IconData icon
         icon: icon,
         seed: const {'name': '', 'type': 'http', 'url': '', 'method': 'POST', 'is_active': true},
         editableKeys: const ['name', 'description', 'type', 'url', 'method', 'headers', 'body', 'script', 'icon', 'is_active'],
+        actions: const [ModuleAction('Execute', '/{id}/execute', icon: Icons.play_arrow)],
       );
     case 'Audit Logs':
       return ApiModule(title: title, path: path, keys: keys, icon: icon, canCreate: false, canUpdate: false, canDelete: false, readOnly: true);
@@ -264,6 +266,8 @@ ApiModule _moduleFor(String title, String path, List<String> keys, IconData icon
             createPath: '/catalogs/{id}/products',
             seed: {'name': '', 'retailer_id': '', 'price': 0, 'currency': 'USD'},
             editableKeys: ['name', 'retailer_id', 'description', 'price', 'currency', 'image_url', 'url', 'availability'],
+            updatePath: '/products/{id}',
+            deletePath: '/products/{id}',
           ),
         ],
       );

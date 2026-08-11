@@ -9,7 +9,7 @@ CATALOG_DART = ROOT / "lib" / "ui" / "management_catalog.dart"
 if not ROOT_DART.exists():
     raise SystemExit("lib/ui/root.dart is missing")
 
-text = ROOT_DART.read_text()
+text = ROOT_DART.read_text(encoding="utf-8")
 
 # Keep the hand-authored shell small while activating the richer feature
 # surfaces already maintained in separate files. This patch is idempotent so
@@ -77,21 +77,21 @@ if "ModuleDef('Profile'" not in text:
         raise SystemExit("Could not locate More module insertion anchor")
     text = text.replace(module_anchor, module_anchor + extra_modules, 1)
 
-ROOT_DART.write_text(text)
+ROOT_DART.write_text(text, encoding="utf-8")
 
 # Related resources often have their own `id`. Preserve the parent ID under a
 # distinct token so /campaigns/{parent_id}/recipients/{id} and similar routes
 # never accidentally substitute the child ID into the parent slot.
 if ADMIN_DART.exists():
-    admin = ADMIN_DART.read_text()
+    admin = ADMIN_DART.read_text(encoding="utf-8")
     admin = admin.replace(
         "final values = {...widget.parent, ...?item};",
         "final values = {'parent_id': widget.parent['id'], ...widget.parent, ...?item};",
     )
-    ADMIN_DART.write_text(admin)
+    ADMIN_DART.write_text(admin, encoding="utf-8")
 
 if CATALOG_DART.exists():
-    catalog = CATALOG_DART.read_text()
+    catalog = CATALOG_DART.read_text(encoding="utf-8")
     catalog = catalog.replace(
         "if (title == 'SSO Settings') return _SSOSettingsScreen(repo: repo);\n  if (single)",
         "if (title == 'SSO Settings') return _SSOSettingsScreen(repo: repo);\n  if (title == 'Agent Analytics') return _ServerDataScreen(repo: repo, title: title, path: path);\n  if (single)",
@@ -113,6 +113,6 @@ if CATALOG_DART.exists():
         "editableKeys: const ['name', 'description', 'type', 'url', 'method', 'headers', 'body', 'script', 'icon', 'is_active'],\n        actions: const [ModuleAction('Execute', '/{id}/execute', icon: Icons.play_arrow)],\n      );",
         1,
     )
-    CATALOG_DART.write_text(catalog)
+    CATALOG_DART.write_text(catalog, encoding="utf-8")
 
 print("Applied Whatomate Flutter feature wiring overlay")

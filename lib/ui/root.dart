@@ -9,6 +9,12 @@ import '../core/calling.dart';
 import '../core/data_repository.dart';
 import '../core/realtime.dart';
 import '../core/session.dart';
+import 'device_surfaces.dart';
+import 'enhanced_calls_screen.dart';
+import 'full_chat_screen.dart';
+import 'management_catalog.dart';
+import 'branding.dart';
+import 'tools_hub_screen.dart';
 
 class WhatomateRoot extends StatefulWidget {
   const WhatomateRoot({
@@ -51,20 +57,29 @@ class _WhatomateRootState extends State<WhatomateRoot> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Whatomate',
+      title: 'Nexus One',
       debugShowCheckedModeBanner: false,
+      themeMode: ThemeMode.light,
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff0738f9)),
+        colorScheme: ColorScheme.fromSeed(seedColor: nexusBlue, surface: Colors.white),
         scaffoldBackgroundColor: Colors.white,
-        inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder()),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xff0738f9),
-          brightness: Brightness.dark,
+        appBarTheme: const AppBarTheme(backgroundColor: Colors.white, surfaceTintColor: Colors.transparent),
+        navigationBarTheme: const NavigationBarThemeData(
+          backgroundColor: Colors.white,
+          indicatorColor: nexusPink,
+          elevation: 0,
+        ),
+        cardTheme: CardThemeData(
+          color: const Color(0xfff7f7f7),
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        ),
+        inputDecorationTheme: const InputDecorationTheme(
+          filled: false,
+          border: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xffdddddd))),
+          enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xffdddddd))),
+          focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: nexusBlue, width: 2)),
         ),
       ),
       home: AnimatedBuilder(
@@ -73,15 +88,15 @@ class _WhatomateRootState extends State<WhatomateRoot> {
           if (widget.session.booting) {
             return const Scaffold(body: Center(child: CircularProgressIndicator()));
           }
-          if (!widget.session.authenticated) {
-            return LoginScreen(session: widget.session);
-          }
-          return MainShell(
+          final page = !widget.session.authenticated
+              ? LoginScreen(session: widget.session)
+              : MainShell(
             api: widget.api,
             session: widget.session,
             realtime: widget.realtime,
             calls: widget.calls,
           );
+          return AnimatedSwitcher(duration: const Duration(milliseconds: 320), child: page);
         },
       ),
     );
@@ -126,44 +141,66 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> changeDomain() async {
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Change Base Domain'),
+        content: TextField(
+          controller: server,
+          autofocus: true,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(labelText: 'Server URL', hintText: 'https://nexus.example.com'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Use domain')),
+        ],
+      ),
+    );
+    if (changed == true && mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                const Icon(Icons.forum_outlined, size: 54),
-                const SizedBox(height: 18),
-                Text('Whatomate', textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 8),
-                const Text('Connect to your Whatomate server', textAlign: TextAlign.center),
-                const SizedBox(height: 30),
-                TextField(controller: server, keyboardType: TextInputType.url,
-                  decoration: const InputDecoration(labelText: 'Server URL', hintText: 'https://whatomate.example.com')),
-                const SizedBox(height: 12),
-                TextField(controller: email, keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Email')),
-                const SizedBox(height: 12),
-                TextField(controller: password, obscureText: obscure,
-                  onSubmitted: (_) => submit(),
-                  decoration: InputDecoration(labelText: 'Password', suffixIcon: IconButton(
-                    icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                    onPressed: () => setState(() => obscure = !obscure),
-                  ))),
-                const SizedBox(height: 18),
-                FilledButton.icon(onPressed: widget.session.busy ? null : submit,
-                  icon: widget.session.busy ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.login),
-                  label: const Text('Sign in')),
+      body: SafeArea(child: LayoutBuilder(builder: (context, constraints) => SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 30),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Center(child: NexusLogo(size: 48)),
+              const SizedBox(height: 34),
+              Text('Sign In To Nexus One', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w500)),
+              const SizedBox(height: 12),
+              const Text('Innovate, Design, and Craft with Nexus', textAlign: TextAlign.center, style: TextStyle(fontSize: 16)),
+              const SizedBox(height: 10),
+              const Text('Pioneering creative solutions through cutting-edge\ntechnology and innovative design thinking.', textAlign: TextAlign.center, style: TextStyle(height: 1.5)),
+              const SizedBox(height: 52),
+              TextField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(hintText: '@your email address')),
+              const SizedBox(height: 18),
+              TextField(controller: password, obscureText: obscure, onSubmitted: (_) => submit(), decoration: InputDecoration(
+                hintText: 'enter your password',
+                suffixIcon: IconButton(icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined), onPressed: () => setState(() => obscure = !obscure)),
+              )),
+              const SizedBox(height: 42),
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                SizedBox(width: 150, height: 48, child: FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: nexusBlue, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
+                  onPressed: widget.session.busy ? null : submit,
+                  child: widget.session.busy ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Sign In'),
+                )),
+                const SizedBox(width: 38),
+                TextButton(onPressed: null, child: const Text('Google Login', style: TextStyle(color: Colors.black))),
               ]),
-            ),
-          ),
+              const SizedBox(height: 80),
+              TextButton(onPressed: changeDomain, child: Text(server.text.trim().isEmpty ? 'Change Base Domain' : 'Change Base Domain  •  ${server.text}', textAlign: TextAlign.center, style: const TextStyle(color: Colors.black))),
+            ]),
+          )),
         ),
-      ),
+      )),
     );
   }
 }
@@ -186,10 +223,10 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     final pages = <Widget>[
       ConversationsScreen(repo: repo, realtime: widget.realtime, calls: widget.calls),
-      ContactsScreen(repo: repo, calls: widget.calls),
-      DialerScreen(repo: repo, calls: widget.calls),
-      CallsScreen(repo: repo, calls: widget.calls, realtime: widget.realtime),
-      MoreScreen(repo: repo, session: widget.session, api: widget.api),
+      EnhancedContactsScreen(repo: repo, calls: widget.calls),
+      EnhancedDialerScreen(repo: repo, calls: widget.calls),
+      EnhancedCallsScreen(repo: repo, calls: widget.calls, realtime: widget.realtime),
+      ToolsHubScreen(repo: repo, session: widget.session, api: widget.api),
     ];
     return AnimatedBuilder(
       animation: Listenable.merge([widget.calls, widget.realtime]),
@@ -208,7 +245,7 @@ class _MainShellState extends State<MainShell> {
             NavigationDestination(icon: Icon(Icons.contacts_outlined), selectedIcon: Icon(Icons.contacts), label: 'Contacts'),
             NavigationDestination(icon: Icon(Icons.dialpad_outlined), selectedIcon: Icon(Icons.dialpad), label: 'Dialer'),
             NavigationDestination(icon: Icon(Icons.phone_outlined), selectedIcon: Icon(Icons.phone), label: 'Calls'),
-            NavigationDestination(icon: Icon(Icons.grid_view_outlined), selectedIcon: Icon(Icons.grid_view), label: 'More'),
+            NavigationDestination(icon: Icon(Icons.grid_view_outlined), selectedIcon: Icon(Icons.grid_view), label: 'Tools'),
           ],
         ),
       ),
@@ -259,7 +296,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
               title: Text(_contactName(c), maxLines: 1, overflow: TextOverflow.ellipsis),
               subtitle: Text(c['phone_number']?.toString() ?? '', maxLines: 1),
               trailing: unread > 0 ? Badge(label: Text('$unread')) : const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FullChatScreen(
                 repo: widget.repo, realtime: widget.realtime, calls: widget.calls, contact: c))),
               onLongPress: () async {
                 final ok = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
@@ -566,8 +603,12 @@ class MoreScreen extends StatelessWidget {
     ModuleDef('Call Transfers','/call-transfers',['call_transfers'],Icons.phone_forwarded_outlined,'call_transfers'),
     ModuleDef('Catalogs','/catalogs',['catalogs'],Icons.storefront_outlined,'catalogs'),
     ModuleDef('Organization Settings','/org/settings',[],Icons.settings_outlined,'settings.general',single:true),
+    ModuleDef('Profile','/me',[],Icons.person_outline,'',single:true),
+    ModuleDef('SSO Settings','/settings/sso',[],Icons.login_outlined,'settings.sso',single:true),
+    ModuleDef('TTS Settings','/tts/settings',[],Icons.record_voice_over_outlined,'settings.general',single:true),
+    ModuleDef('Widgets','/widgets',['widgets'],Icons.widgets_outlined,'analytics'),
   ];
-  @override Widget build(BuildContext context){final visible=modules.where((m)=>session.hasPermission(m.permission)||m.permission=='').toList();return Scaffold(appBar:AppBar(title:const Text('More'),actions:[PopupMenuButton<String>(onSelected:(v)async{if(v=='logout')await session.logout();},itemBuilder:(_)=>const [PopupMenuItem(value:'logout',child:Text('Sign out'))])]),body:ListView(padding:const EdgeInsets.all(12),children:[Card(child:ListTile(leading:const CircleAvatar(child:Icon(Icons.person)),title:Text(session.displayName),subtitle:Text(session.user?['email']?.toString()??''),trailing:Switch(value:session.user?['is_available']!=false,onChanged:session.setAvailability))),const SizedBox(height:8),GridView.builder(shrinkWrap:true,physics:const NeverScrollableScrollPhysics(),gridDelegate:const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent:220,childAspectRatio:1.55,crossAxisSpacing:8,mainAxisSpacing:8),itemCount:visible.length,itemBuilder:(context,i){final m=visible[i];return Card(child:InkWell(onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>GenericModuleScreen(repo:repo,module:m))),child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Icon(m.icon),const Spacer(),Text(m.title,style:const TextStyle(fontWeight:FontWeight.w600))]))));})]));}
+  @override Widget build(BuildContext context){final visible=modules.where((m)=>session.hasPermission(m.permission)||m.permission=='').toList();return Scaffold(appBar:AppBar(title:const Text('More'),actions:[PopupMenuButton<String>(onSelected:(v)async{if(v=='logout')await session.logout();},itemBuilder:(_)=>const [PopupMenuItem(value:'logout',child:Text('Sign out'))])]),body:ListView(padding:const EdgeInsets.all(12),children:[Card(child:ListTile(leading:const CircleAvatar(child:Icon(Icons.person)),title:Text(session.displayName),subtitle:Text(session.user?['email']?.toString()??''),trailing:Switch(value:session.user?['is_available']!=false,onChanged:session.setAvailability))),const SizedBox(height:8),GridView.builder(shrinkWrap:true,physics:const NeverScrollableScrollPhysics(),gridDelegate:const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent:220,childAspectRatio:1.55,crossAxisSpacing:8,mainAxisSpacing:8),itemCount:visible.length,itemBuilder:(context,i){final m=visible[i];return Card(child:InkWell(onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>buildManagementModuleScreen(repo:repo,title:m.title,path:m.path,keys:m.keys,icon:m.icon,single:m.single))),child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Icon(m.icon),const Spacer(),Text(m.title,style:const TextStyle(fontWeight:FontWeight.w600))]))));})]));}
 }
 
 class ModuleDef {const ModuleDef(this.title,this.path,this.keys,this.icon,this.permission,{this.single=false});final String title,path,permission;final List<String> keys;final IconData icon;final bool single;}

@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[2]
 ANDROID = ROOT / "android"
 APP = ANDROID / "app"
 SRC = Path(__file__).resolve().parent / "src"
+RES = Path(__file__).resolve().parent / "res"
 
 if not (APP / "build.gradle.kts").exists():
     raise SystemExit("android/app/build.gradle.kts is missing; run flutter create first")
@@ -16,6 +17,12 @@ native_src = SRC / "main" / "kotlin"
 native_dst = APP / "src" / "main" / "kotlin"
 if native_src.exists():
     shutil.copytree(native_src, native_dst, dirs_exist_ok=True)
+
+# Install the supplied adaptive, maskable and monochrome Nexus launcher icons
+# after Flutter creates the Android scaffold. Keeping these in the overlay
+# makes CI builds reproducible without checking generated platform files in.
+if RES.exists():
+    shutil.copytree(RES, APP / "src" / "main" / "res", dirs_exist_ok=True)
 
 # Patch Gradle with Firebase Messaging and Android Core-Telecom. Manual
 # FirebaseOptions initialization means no google-services.json or Google
@@ -75,6 +82,9 @@ for permission in permissions:
 application = root.find("application")
 if application is None:
     raise SystemExit("AndroidManifest application node missing")
+application.set(ANDROID_NS + "icon", "@mipmap/ic_launcher")
+application.set(ANDROID_NS + "roundIcon", "@mipmap/ic_launcher")
+application.set(ANDROID_NS + "label", "Nexus One")
 
 # Flutter's generated MainActivity is replaced by our overlay; make it able to
 # receive fresh call intents while an existing instance is alive.
