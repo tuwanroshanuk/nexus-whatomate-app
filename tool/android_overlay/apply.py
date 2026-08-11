@@ -54,6 +54,7 @@ permissions = [
     "android.permission.POST_NOTIFICATIONS",
     "android.permission.USE_FULL_SCREEN_INTENT",
     "android.permission.RECORD_AUDIO",
+    "android.permission.READ_CONTACTS",
     "android.permission.MODIFY_AUDIO_SETTINGS",
     "android.permission.BLUETOOTH_CONNECT",
     "android.permission.WAKE_LOCK",
