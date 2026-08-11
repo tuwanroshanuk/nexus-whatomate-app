@@ -7,6 +7,11 @@ import '../core/api_client.dart';
 import '../core/calling.dart';
 import '../core/data_repository.dart';
 
+const _contactProperties = <ContactProperty>{
+  ContactProperty.name,
+  ContactProperty.phone,
+};
+
 class EnhancedContactsScreen extends StatefulWidget {
   const EnhancedContactsScreen({super.key, required this.repo, required this.calls});
   final DataRepository repo;
@@ -16,7 +21,8 @@ class EnhancedContactsScreen extends StatefulWidget {
   State<EnhancedContactsScreen> createState() => _EnhancedContactsScreenState();
 }
 
-class _EnhancedContactsScreenState extends State<EnhancedContactsScreen> with SingleTickerProviderStateMixin {
+class _EnhancedContactsScreenState extends State<EnhancedContactsScreen>
+    with SingleTickerProviderStateMixin {
   late final TabController tabs = TabController(length: 2, vsync: this);
   final search = TextEditingController();
   List<Map<String, dynamic>> serverContacts = [];
@@ -31,7 +37,9 @@ class _EnhancedContactsScreenState extends State<EnhancedContactsScreen> with Si
     super.initState();
     _loadServer();
     tabs.addListener(() {
-      if (tabs.index == 1 && deviceContacts.isEmpty && !loadingDevice) _loadDevice();
+      if (tabs.index == 1 && deviceContacts.isEmpty && !loadingDevice) {
+        _loadDevice();
+      }
     });
   }
 
@@ -57,10 +65,12 @@ class _EnhancedContactsScreenState extends State<EnhancedContactsScreen> with Si
   Future<void> _loadDevice() async {
     setState(() => loadingDevice = true);
     try {
-      devicePermission = await FlutterContacts.requestPermission(readonly: true);
+      final permission = await FlutterContacts.permissions.request(PermissionType.read);
+      devicePermission = permission == PermissionStatus.granted;
       if (devicePermission) {
-        deviceContacts = await FlutterContacts.getContacts(withProperties: true, withPhoto: false);
-        deviceContacts.sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+        deviceContacts = await FlutterContacts.getAll(properties: _contactProperties);
+        deviceContacts.sort((a, b) =>
+            (a.displayName ?? '').toLowerCase().compareTo((b.displayName ?? '').toLowerCase()));
       }
     } catch (e) {
       if (mounted) _snack('Unable to read device contacts: $e');
@@ -73,7 +83,7 @@ class _EnhancedContactsScreenState extends State<EnhancedContactsScreen> with Si
     final q = search.text.trim().toLowerCase();
     if (q.isEmpty) return deviceContacts;
     return deviceContacts.where((c) {
-      if (c.displayName.toLowerCase().contains(q)) return true;
+      if ((c.displayName ?? '').toLowerCase().contains(q)) return true;
       return c.phones.any((p) => p.number.toLowerCase().contains(q));
     }).toList();
   }
@@ -88,7 +98,11 @@ class _EnhancedContactsScreenState extends State<EnhancedContactsScreen> with Si
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(controller: name, decoration: const InputDecoration(labelText: 'Name')),
           const SizedBox(height: 10),
-          TextField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone number')),
+          TextField(
+            controller: phone,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(labelText: 'Phone number'),
+          ),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -107,8 +121,9 @@ class _EnhancedContactsScreenState extends State<EnhancedContactsScreen> with Si
 
   Future<void> _import(Contact contact, String number) async {
     try {
-      await widget.repo.createContact(number, name: contact.displayName);
-      if (mounted) _snack('${contact.displayName.isEmpty ? number : contact.displayName} imported');
+      final displayName = (contact.displayName ?? '').trim();
+      await widget.repo.createContact(number, name: displayName);
+      if (mounted) _snack('${displayName.isEmpty ? number : displayName} imported');
       await _loadServer();
     } catch (e) {
       final normalized = widget.repo.api.normalize(e);
@@ -119,8 +134,12 @@ class _EnhancedContactsScreenState extends State<EnhancedContactsScreen> with Si
   Future<void> _callServerContact(Map<String, dynamic> contact) async {
     try {
       final accounts = await widget.repo.accounts();
-      final account = (contact['whatsapp_account'] ?? (accounts.isNotEmpty ? accounts.first['name'] : null))?.toString();
-      if (account == null || account.isEmpty) throw ApiException('No WhatsApp account configured');
+      final account = (contact['whatsapp_account'] ??
+              (accounts.isNotEmpty ? accounts.first['name'] : null))
+          ?.toString();
+      if (account == null || account.isEmpty) {
+        throw ApiException('No WhatsApp account configured');
+      }
       final id = contact['id']?.toString();
       if (id == null || id.isEmpty) throw ApiException('Contact ID is missing');
       final permission = await widget.calls.callPermission(id, account);
@@ -141,7 +160,8 @@ class _EnhancedContactsScreenState extends State<EnhancedContactsScreen> with Si
     }
   }
 
-  void _snack(String text) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  void _snack(String text) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
   @override
   Widget build(BuildContext context) {
@@ -149,10 +169,20 @@ class _EnhancedContactsScreenState extends State<EnhancedContactsScreen> with Si
       appBar: AppBar(
         title: const Text('Contacts'),
         actions: [
-          IconButton(onPressed: _createServerContact, tooltip: 'New contact', icon: const Icon(Icons.person_add_alt_1)),
-          IconButton(onPressed: tabs.index == 0 ? _loadServer : _loadDevice, icon: const Icon(Icons.refresh)),
+          IconButton(
+            onPressed: _createServerContact,
+            tooltip: 'New contact',
+            icon: const Icon(Icons.person_add_alt_1),
+          ),
+          IconButton(
+            onPressed: tabs.index == 0 ? _loadServer : _loadDevice,
+            icon: const Icon(Icons.refresh),
+          ),
         ],
-        bottom: TabBar(controller: tabs, tabs: const [Tab(text: 'Whatomate'), Tab(text: 'Phone')]),
+        bottom: TabBar(
+          controller: tabs,
+          tabs: const [Tab(text: 'Whatomate'), Tab(text: 'Phone')],
+        ),
       ),
       body: Column(children: [
         Padding(
@@ -169,7 +199,10 @@ class _EnhancedContactsScreenState extends State<EnhancedContactsScreen> with Si
                 }
               });
             },
-            decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search name or phone'),
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              hintText: 'Search name or phone',
+            ),
           ),
         ),
         Expanded(
@@ -180,14 +213,17 @@ class _EnhancedContactsScreenState extends State<EnhancedContactsScreen> with Si
                     onRefresh: _loadServer,
                     child: ListView.separated(
                       itemCount: serverContacts.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (_, i) {
                         final c = serverContacts[i];
                         return ListTile(
                           leading: CircleAvatar(child: Text(_initials(_serverName(c)))),
                           title: Text(_serverName(c)),
                           subtitle: Text(c['phone_number']?.toString() ?? ''),
-                          trailing: IconButton(onPressed: () => _callServerContact(c), icon: const Icon(Icons.phone_outlined)),
+                          trailing: IconButton(
+                            onPressed: () => _callServerContact(c),
+                            icon: const Icon(Icons.phone_outlined),
+                          ),
                           onTap: () => _showServerContact(c),
                         );
                       },
@@ -203,33 +239,47 @@ class _EnhancedContactsScreenState extends State<EnhancedContactsScreen> with Si
   Widget _deviceList() {
     if (loadingDevice) return const Center(child: CircularProgressIndicator());
     if (!devicePermission) {
-      return Center(child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.contacts_outlined, size: 52),
-          const SizedBox(height: 12),
-          const Text('Allow contact access to search and import people from this phone.', textAlign: TextAlign.center),
-          const SizedBox(height: 16),
-          FilledButton.icon(onPressed: _loadDevice, icon: const Icon(Icons.lock_open), label: const Text('Allow contacts')),
-        ]),
-      ));
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.contacts_outlined, size: 52),
+            const SizedBox(height: 12),
+            const Text(
+              'Allow contact access to search and import people from this phone.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _loadDevice,
+              icon: const Icon(Icons.lock_open),
+              label: const Text('Allow contacts'),
+            ),
+          ]),
+        ),
+      );
     }
     final items = _filteredDevice;
     return RefreshIndicator(
       onRefresh: _loadDevice,
       child: ListView.separated(
         itemCount: items.length,
-        separatorBuilder: (_, __) => const Divider(height: 1),
+        separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (_, i) {
           final c = items[i];
-          final number = c.phones.isNotEmpty ? c.phones.first.number : '';
+          final displayName = (c.displayName ?? '').trim();
+          final phoneNumber = c.phones.isNotEmpty ? c.phones.first.number : '';
           return ListTile(
-            leading: CircleAvatar(child: Text(_initials(c.displayName))),
-            title: Text(c.displayName.isEmpty ? number : c.displayName),
-            subtitle: Text(number.isEmpty ? 'No phone number' : number),
-            trailing: number.isEmpty
+            leading: CircleAvatar(child: Text(_initials(displayName))),
+            title: Text(displayName.isEmpty ? phoneNumber : displayName),
+            subtitle: Text(phoneNumber.isEmpty ? 'No phone number' : phoneNumber),
+            trailing: phoneNumber.isEmpty
                 ? null
-                : FilledButton.tonalIcon(onPressed: () => _import(c, number), icon: const Icon(Icons.download_outlined), label: const Text('Import')),
+                : FilledButton.tonalIcon(
+                    onPressed: () => _import(c, phoneNumber),
+                    icon: const Icon(Icons.download_outlined),
+                    label: const Text('Import'),
+                  ),
           );
         },
       ),
@@ -240,17 +290,26 @@ class _EnhancedContactsScreenState extends State<EnhancedContactsScreen> with Si
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (ctx) => SafeArea(child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          CircleAvatar(radius: 30, child: Text(_initials(_serverName(c)))),
-          const SizedBox(height: 10),
-          Text(_serverName(c), style: Theme.of(ctx).textTheme.titleLarge),
-          Text(c['phone_number']?.toString() ?? ''),
-          const SizedBox(height: 18),
-          FilledButton.icon(onPressed: () { Navigator.pop(ctx); _callServerContact(c); }, icon: const Icon(Icons.phone), label: const Text('Call')),
-        ]),
-      )),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            CircleAvatar(radius: 30, child: Text(_initials(_serverName(c)))),
+            const SizedBox(height: 10),
+            Text(_serverName(c), style: Theme.of(ctx).textTheme.titleLarge),
+            Text(c['phone_number']?.toString() ?? ''),
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _callServerContact(c);
+              },
+              icon: const Icon(Icons.phone),
+              label: const Text('Call'),
+            ),
+          ]),
+        ),
+      ),
     );
   }
 }
@@ -287,9 +346,9 @@ class _EnhancedDialerScreenState extends State<EnhancedDialerScreen> {
 
   Future<void> _loadDeviceSilently() async {
     try {
-      final allowed = await FlutterContacts.requestPermission(readonly: true);
-      if (allowed) {
-        deviceContacts = await FlutterContacts.getContacts(withProperties: true, withPhoto: false);
+      final permission = await FlutterContacts.permissions.request(PermissionType.read);
+      if (permission == PermissionStatus.granted) {
+        deviceContacts = await FlutterContacts.getAll(properties: _contactProperties);
         if (mounted) setState(() {});
       }
     } catch (_) {}
@@ -314,8 +373,12 @@ class _EnhancedDialerScreenState extends State<EnhancedDialerScreen> {
   List<Contact> get _deviceMatches {
     final q = number.text.trim().toLowerCase();
     if (q.isEmpty) return const [];
-    return deviceContacts.where((c) =>
-      c.displayName.toLowerCase().contains(q) || c.phones.any((p) => p.number.toLowerCase().contains(q))).take(5).toList();
+    return deviceContacts
+        .where((c) =>
+            (c.displayName ?? '').toLowerCase().contains(q) ||
+            c.phones.any((p) => p.number.toLowerCase().contains(q)))
+        .take(5)
+        .toList();
   }
 
   Future<void> _dial([Map<String, dynamic>? known]) async {
@@ -335,31 +398,47 @@ class _EnhancedDialerScreenState extends State<EnhancedDialerScreen> {
         }
       }
       if (contact == null) {
-        final create = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-          title: const Text('Create Whatomate contact?'),
-          content: Text('No exact Whatomate contact matches $raw. Create it before requesting call permission?'),
-          actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Create'))],
-        ));
+        if (!mounted) return;
+        final create = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Create Whatomate contact?'),
+            content: Text(
+              'No exact Whatomate contact matches $raw. Create it before requesting call permission?',
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Create')),
+            ],
+          ),
+        );
         if (create != true) return;
         contact = await widget.repo.createContact(raw);
       }
+      final resolvedContact = contact;
       final accounts = await widget.repo.accounts();
-      final account = (contact['whatsapp_account'] ?? (accounts.isNotEmpty ? accounts.first['name'] : null))?.toString();
-      if (account == null || account.isEmpty) throw ApiException('No WhatsApp account configured');
-      final id = contact['id']?.toString();
+      final account = (resolvedContact['whatsapp_account'] ??
+              (accounts.isNotEmpty ? accounts.first['name'] : null))
+          ?.toString();
+      if (account == null || account.isEmpty) {
+        throw ApiException('No WhatsApp account configured');
+      }
+      final id = resolvedContact['id']?.toString();
       if (id == null || id.isEmpty) throw ApiException('Contact ID is missing');
       final permission = await widget.calls.callPermission(id, account);
       final status = permission['status']?.toString();
       if (status != 'accepted' && status != 'temporary' && status != 'permanent') {
         await widget.calls.requestPermission(id, account);
-        if (mounted) _snack('Call permission request sent. Call after the contact accepts.');
+        if (mounted) {
+          _snack('Call permission request sent. Call after the contact accepts.');
+        }
         return;
       }
       await widget.calls.makeOutgoingCall(
         contactId: id,
-        contactName: _serverName(contact),
+        contactName: _serverName(resolvedContact),
         whatsappAccount: account,
-        phone: (contact['phone_number'] ?? raw).toString(),
+        phone: (resolvedContact['phone_number'] ?? raw).toString(),
       );
     } catch (e) {
       if (mounted) _snack(widget.repo.api.normalize(e).message);
@@ -374,83 +453,119 @@ class _EnhancedDialerScreenState extends State<EnhancedDialerScreen> {
     _changed();
   }
 
-  void _snack(String text) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  void _snack(String text) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
   @override
   Widget build(BuildContext context) {
     final device = _deviceMatches;
     return Scaffold(
       appBar: AppBar(title: const Text('Dialer')),
-      body: SafeArea(child: Center(child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480),
-        child: Column(children: [
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: TextField(
-              controller: number,
-              keyboardType: TextInputType.phone,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineSmall,
-              onChanged: (_) => _changed(),
-              decoration: const InputDecoration(hintText: 'Name or number', prefixIcon: Icon(Icons.search)),
-            ),
-          ),
-          if (serverMatches.isNotEmpty || device.isNotEmpty)
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 170),
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  for (final c in serverMatches)
-                    ListTile(
-                      dense: true,
-                      leading: const Icon(Icons.cloud_outlined),
-                      title: Text(_serverName(c)),
-                      subtitle: Text(c['phone_number']?.toString() ?? ''),
-                      onTap: () { number.text = c['phone_number']?.toString() ?? ''; setState(() {}); },
-                      trailing: IconButton(onPressed: () => _dial(c), icon: const Icon(Icons.call_outlined)),
-                    ),
-                  for (final c in device)
-                    ListTile(
-                      dense: true,
-                      leading: const Icon(Icons.phone_android_outlined),
-                      title: Text(c.displayName),
-                      subtitle: Text(c.phones.isEmpty ? '' : c.phones.first.number),
-                      onTap: () => _selectDevice(c),
-                    ),
-                ],
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Column(children: [
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: TextField(
+                  controller: number,
+                  keyboardType: TextInputType.phone,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineSmall,
+                  onChanged: (_) => _changed(),
+                  decoration: const InputDecoration(
+                    hintText: 'Name or number',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                ),
               ),
-            ),
-          const Spacer(),
-          GridView.count(
-            crossAxisCount: 3,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            padding: const EdgeInsets.symmetric(horizontal: 54),
-            children: keys.map((key) => FilledButton.tonal(
-              onPressed: () { number.text += key; _changed(); },
-              style: FilledButton.styleFrom(shape: const CircleBorder()),
-              child: Text(key, style: const TextStyle(fontSize: 24)),
-            )).toList(),
+              if (serverMatches.isNotEmpty || device.isNotEmpty)
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 170),
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      for (final c in serverMatches)
+                        ListTile(
+                          dense: true,
+                          leading: const Icon(Icons.cloud_outlined),
+                          title: Text(_serverName(c)),
+                          subtitle: Text(c['phone_number']?.toString() ?? ''),
+                          onTap: () {
+                            number.text = c['phone_number']?.toString() ?? '';
+                            setState(() {});
+                          },
+                          trailing: IconButton(
+                            onPressed: () => _dial(c),
+                            icon: const Icon(Icons.call_outlined),
+                          ),
+                        ),
+                      for (final c in device)
+                        ListTile(
+                          dense: true,
+                          leading: const Icon(Icons.phone_android_outlined),
+                          title: Text((c.displayName ?? '').isEmpty
+                              ? (c.phones.isEmpty ? 'Phone contact' : c.phones.first.number)
+                              : c.displayName!),
+                          subtitle: Text(c.phones.isEmpty ? '' : c.phones.first.number),
+                          onTap: () => _selectDevice(c),
+                        ),
+                    ],
+                  ),
+                ),
+              const Spacer(),
+              GridView.count(
+                crossAxisCount: 3,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                padding: const EdgeInsets.symmetric(horizontal: 54),
+                children: keys
+                    .map(
+                      (key) => FilledButton.tonal(
+                        onPressed: () {
+                          number.text += key;
+                          _changed();
+                        },
+                        style: FilledButton.styleFrom(shape: const CircleBorder()),
+                        child: Text(key, style: const TextStyle(fontSize: 24)),
+                      ),
+                    )
+                    .toList(),
+              ),
+              const SizedBox(height: 16),
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                IconButton(
+                  onPressed: number.text.isEmpty
+                      ? null
+                      : () {
+                          number.text = number.text.substring(0, number.text.length - 1);
+                          _changed();
+                        },
+                  icon: const Icon(Icons.backspace_outlined),
+                ),
+                const SizedBox(width: 28),
+                IconButton.filled(
+                  onPressed: busy ? null : () => _dial(),
+                  icon: busy
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.call),
+                  iconSize: 30,
+                  padding: const EdgeInsets.all(18),
+                ),
+                const SizedBox(width: 64),
+              ]),
+              const Spacer(),
+            ]),
           ),
-          const SizedBox(height: 16),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            IconButton(onPressed: number.text.isEmpty ? null : () { number.text = number.text.substring(0, number.text.length - 1); _changed(); }, icon: const Icon(Icons.backspace_outlined)),
-            const SizedBox(width: 28),
-            IconButton.filled(
-              onPressed: busy ? null : () => _dial(),
-              icon: busy ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.call),
-              iconSize: 30,
-              padding: const EdgeInsets.all(18),
-            ),
-            const SizedBox(width: 64),
-          ]),
-          const Spacer(),
-        ]),
-      ))),
+        ),
+      ),
     );
   }
 }
