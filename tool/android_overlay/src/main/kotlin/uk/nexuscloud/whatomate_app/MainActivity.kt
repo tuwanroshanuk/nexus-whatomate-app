@@ -14,6 +14,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
+import org.json.JSONArray
 import org.json.JSONObject
 
 class MainActivity : FlutterActivity(), EventChannel.StreamHandler {
@@ -111,6 +112,12 @@ class MainActivity : FlutterActivity(), EventChannel.StreamHandler {
                         requestNotificationPermission()
                         result.success(null)
                     }
+                    "setCurrentContact" -> {
+                        MessageNotificationHelper.setActiveContact(
+                            call.argument<String>("contactId"),
+                        )
+                        result.success(null)
+                    }
                     "canUseFullScreenIntent" -> {
                         val manager = getSystemService(NotificationManager::class.java)
                         val allowed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -140,7 +147,13 @@ class MainActivity : FlutterActivity(), EventChannel.StreamHandler {
 
     override fun onResume() {
         super.onResume()
+        MessageNotificationHelper.setAppForeground(true)
         if (eventSink != null) consumeCallAction(intent)?.let { eventSink?.success(it) }
+    }
+
+    override fun onPause() {
+        MessageNotificationHelper.setAppForeground(false)
+        super.onPause()
     }
 
     override fun onDestroy() {
@@ -172,11 +185,20 @@ class MainActivity : FlutterActivity(), EventChannel.StreamHandler {
         val parsed = mutableMapOf<String, Any?>()
         try {
             val json = JSONObject(rawPayload)
-            for (key in json.keys()) parsed[key] = json.opt(key)
+            for (key in json.keys()) parsed[key] = standardJsonValue(json.opt(key))
         } catch (_: Exception) {
             parsed["raw"] = rawPayload
         }
         return mapOf("action" to action, "payload" to parsed)
+    }
+
+    private fun standardJsonValue(value: Any?): Any? = when (value) {
+        null, JSONObject.NULL -> null
+        is JSONObject -> mutableMapOf<String, Any?>().apply {
+            for (key in value.keys()) this[key] = standardJsonValue(value.opt(key))
+        }
+        is JSONArray -> List(value.length()) { index -> standardJsonValue(value.opt(index)) }
+        else -> value
     }
 
     private fun requestNotificationPermission() {

@@ -29,6 +29,13 @@ class PushBridge extends ChangeNotifier {
 
   final _callActions = StreamController<NativeCallAction>.broadcast();
   Stream<NativeCallAction> get callActions => _callActions.stream;
+  Map<String, dynamic>? _pendingMessage;
+
+  Map<String, dynamic>? takePendingMessage() {
+    final value = _pendingMessage;
+    _pendingMessage = null;
+    return value;
+  }
 
   StreamSubscription<dynamic>? _nativeEvents;
   bool configured = false;
@@ -37,18 +44,24 @@ class PushBridge extends ChangeNotifier {
 
   bool get supported => !kIsWeb && Platform.isAndroid;
   bool get hasFirebaseConfig =>
-      projectId.isNotEmpty && applicationId.isNotEmpty && apiKey.isNotEmpty && senderId.isNotEmpty;
+      projectId.isNotEmpty &&
+      applicationId.isNotEmpty &&
+      apiKey.isNotEmpty &&
+      senderId.isNotEmpty;
 
   Future<void> initialize() async {
     if (!supported || !session.authenticated || !hasFirebaseConfig) return;
     try {
-      _nativeEvents ??= _events.receiveBroadcastStream().listen(_handleNativeEvent);
-      final result = await _channel.invokeMapMethod<String, dynamic>('configure', {
-        'projectId': projectId,
-        'applicationId': applicationId,
-        'apiKey': apiKey,
-        'senderId': senderId,
-      });
+      _nativeEvents ??= _events.receiveBroadcastStream().listen(
+        _handleNativeEvent,
+      );
+      final result = await _channel
+          .invokeMapMethod<String, dynamic>('configure', {
+            'projectId': projectId,
+            'applicationId': applicationId,
+            'apiKey': apiKey,
+            'senderId': senderId,
+          });
       token = result?['token']?.toString();
       configured = result?['configured'] == true;
       if (token != null && token!.isNotEmpty) {
@@ -57,7 +70,9 @@ class PushBridge extends ChangeNotifier {
         // falsely implies that this installation is call-reachable.
         await realtime.registerPushToken(token!);
       }
-      final initial = await _channel.invokeMapMethod<String, dynamic>('getInitialCallAction');
+      final initial = await _channel.invokeMapMethod<String, dynamic>(
+        'getInitialCallAction',
+      );
       if (initial != null && initial['action'] != null) _emitAction(initial);
       lastError = null;
     } catch (e) {
@@ -73,7 +88,10 @@ class PushBridge extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<void> showOngoingCall({required String caller, required String status}) async {
+  Future<void> showOngoingCall({
+    required String caller,
+    required String status,
+  }) async {
     if (!supported) return;
     try {
       await _channel.invokeMethod<void>('showOngoingCall', {
@@ -90,7 +108,10 @@ class PushBridge extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<void> reportOutgoingTelecomCall({required String caller, required String address}) async {
+  Future<void> reportOutgoingTelecomCall({
+    required String caller,
+    required String address,
+  }) async {
     if (!supported) return;
     try {
       await _channel.invokeMethod<void>('reportOutgoingTelecomCall', {
@@ -152,7 +173,8 @@ class PushBridge extends ChangeNotifier {
   Future<bool> canUseFullScreenIntent() async {
     if (!supported) return false;
     try {
-      return await _channel.invokeMethod<bool>('canUseFullScreenIntent') ?? false;
+      return await _channel.invokeMethod<bool>('canUseFullScreenIntent') ??
+          false;
     } catch (_) {
       return false;
     }
@@ -176,6 +198,11 @@ class PushBridge extends ChangeNotifier {
     final payload = rawPayload is Map
         ? Map<String, dynamic>.from(rawPayload)
         : <String, dynamic>{};
+    if (action == 'open_message') {
+      _pendingMessage = payload;
+      notifyListeners();
+      return;
+    }
     _callActions.add(NativeCallAction(action: action, payload: payload));
   }
 

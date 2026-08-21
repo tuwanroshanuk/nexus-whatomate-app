@@ -80,7 +80,9 @@ Future<void> main() async {
 
     final caller = state.contactName.trim().isNotEmpty
         ? state.contactName.trim()
-        : (state.phone.trim().isNotEmpty ? state.phone.trim() : 'Whatomate call');
+        : (state.phone.trim().isNotEmpty
+              ? state.phone.trim()
+              : 'Whatomate call');
     final status = state.status.replaceAll('_', ' ');
     final signature = '$caller|$status';
     if (signature != nativeCallSignature) {
@@ -88,7 +90,8 @@ Future<void> main() async {
       unawaited(push.showOngoingCall(caller: caller, status: status));
     }
 
-    final identity = state.callLogId ?? state.transferId ?? '${state.direction}:$caller';
+    final identity =
+        state.callLogId ?? state.transferId ?? '${state.direction}:$caller';
     if (telecomCallIdentity.isEmpty) {
       telecomCallIdentity = identity;
       telecomStatus = state.status;
@@ -97,7 +100,9 @@ Future<void> main() async {
       // before the user answers. Outgoing calls originate in Flutter, so they
       // must be introduced to Telecom here.
       if (state.direction == 'outgoing') {
-        unawaited(push.reportOutgoingTelecomCall(caller: caller, address: state.phone));
+        unawaited(
+          push.reportOutgoingTelecomCall(caller: caller, address: state.phone),
+        );
       }
     }
 
@@ -127,6 +132,7 @@ Future<void> main() async {
         session: session,
         realtime: realtime,
         calls: calls,
+        push: push,
       ),
     ),
   );
@@ -190,8 +196,11 @@ class NativeCallCoordinator {
     }
   }
 
-  Future<Map<String, dynamic>?> _resolveTransfer(Map<String, dynamic> payload) async {
-    final transferId = payload['id']?.toString() ?? payload['transfer_id']?.toString();
+  Future<Map<String, dynamic>?> _resolveTransfer(
+    Map<String, dynamic> payload,
+  ) async {
+    final transferId =
+        payload['id']?.toString() ?? payload['transfer_id']?.toString();
     if (transferId != null && transferId.isNotEmpty) {
       try {
         final data = api.unwrap(await api.get('/call-transfers/$transferId'));
@@ -200,14 +209,17 @@ class NativeCallCoordinator {
     }
 
     final callLogId = payload['call_log_id']?.toString();
-    final data = api.unwrap(await api.get('/call-transfers', query: {
-      'status': 'waiting',
-      'page': 1,
-      'limit': 50,
-    }));
+    final data = api.unwrap(
+      await api.get(
+        '/call-transfers',
+        query: {'status': 'waiting', 'page': 1, 'limit': 50},
+      ),
+    );
     final raw = data is Map ? data['call_transfers'] : data;
     if (raw is! List) return null;
-    final transfers = raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e));
+    final transfers = raw.whereType<Map>().map(
+      (e) => Map<String, dynamic>.from(e),
+    );
     if (callLogId != null && callLogId.isNotEmpty) {
       for (final transfer in transfers) {
         if (transfer['call_log_id']?.toString() == callLogId) return transfer;

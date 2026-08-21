@@ -8,6 +8,7 @@ class WhatomateMessagingService : FirebaseMessagingService() {
         FirebaseBootstrap.ensure(this)
         TelecomCallBridge.initialize(this)
         CallNotificationHelper.createCallChannel(this)
+        MessageNotificationHelper.createChannel(this)
         super.onCreate()
     }
 
@@ -22,6 +23,7 @@ class WhatomateMessagingService : FirebaseMessagingService() {
         val payload = message.data["payload"] ?: "{}"
 
         when (event) {
+            "new_message" -> MessageNotificationHelper.showMessage(this, payload)
             "call_transfer_waiting" -> {
                 TelecomCallBridge.reportIncoming(this, payload)
                 CallNotificationHelper.showIncomingCall(this, payload)

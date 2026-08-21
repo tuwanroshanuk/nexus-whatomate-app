@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -32,17 +34,22 @@ class RealtimeService extends ChangeNotifier {
   String? currentContactId;
   Map<String, dynamic>? _pendingPushRegistration;
   Completer<void>? _pushRegistrationAck;
+  static const _nativePushChannel = MethodChannel(
+    'uk.nexuscloud.whatomate/push',
+  );
 
   Future<void> connect() async {
     if (!session.authenticated || connected || _channel != null) return;
     _closing = false;
     try {
       final token = await session.websocketToken();
-      if (token == null || token.isEmpty) throw StateError('No WebSocket token');
+      if (token == null || token.isEmpty)
+        throw StateError('No WebSocket token');
       final root = Uri.parse(api.serverRoot);
       final uri = root.replace(
         scheme: root.scheme == 'https' ? 'wss' : 'ws',
-        path: '${root.path.endsWith('/') ? root.path.substring(0, root.path.length - 1) : root.path}/ws',
+        path:
+            '${root.path.endsWith('/') ? root.path.substring(0, root.path.length - 1) : root.path}/ws',
         query: null,
       );
 
@@ -56,7 +63,12 @@ class RealtimeService extends ChangeNotifier {
       );
       _channel = channel;
       await channel.ready;
-      channel.sink.add(jsonEncode({'type': 'auth', 'payload': {'token': token}}));
+      channel.sink.add(
+        jsonEncode({
+          'type': 'auth',
+          'payload': {'token': token},
+        }),
+      );
       _subscription = channel.stream.listen(
         _handle,
         onError: (_) => _lost(),
@@ -98,9 +110,21 @@ class RealtimeService extends ChangeNotifier {
 
   void setCurrentContact(String? contactId) {
     currentContactId = contactId;
+    if (!kIsWeb && Platform.isAndroid) {
+      unawaited(
+        _nativePushChannel
+            .invokeMethod<void>('setCurrentContact', {'contactId': contactId})
+            .catchError((_) {}),
+      );
+    }
     final channel = _channel;
     if (channel != null && connected) {
-      channel.sink.add(jsonEncode({'type': 'set_contact', 'payload': {'contact_id': contactId}}));
+      channel.sink.add(
+        jsonEncode({
+          'type': 'set_contact',
+          'payload': {'contact_id': contactId},
+        }),
+      );
     }
   }
 
@@ -118,7 +142,9 @@ class RealtimeService extends ChangeNotifier {
     };
     if (!connected) await connect();
     if (!connected || _channel == null) {
-      throw StateError('Realtime connection unavailable; push registration cannot complete');
+      throw StateError(
+        'Realtime connection unavailable; push registration cannot complete',
+      );
     }
 
     final ack = Completer<void>();
@@ -132,23 +158,29 @@ class RealtimeService extends ChangeNotifier {
   }
 
   void _sendPushRegistration(Map<String, dynamic> payload) {
-    _channel?.sink.add(jsonEncode({'type': 'register_push_token', 'payload': payload}));
+    _channel?.sink.add(
+      jsonEncode({'type': 'register_push_token', 'payload': payload}),
+    );
   }
 
   Future<void> unregisterPushToken(String token) async {
     if (connected) {
-      _channel?.sink.add(jsonEncode({
-        'type': 'unregister_push_token',
-        'payload': {'token': token},
-      }));
+      _channel?.sink.add(
+        jsonEncode({
+          'type': 'unregister_push_token',
+          'payload': {'token': token},
+        }),
+      );
     }
-    if (_pendingPushRegistration?['token'] == token) _pendingPushRegistration = null;
+    if (_pendingPushRegistration?['token'] == token)
+      _pendingPushRegistration = null;
   }
 
   void _startPing() {
     _ping?.cancel();
     _ping = Timer.periodic(const Duration(seconds: 25), (_) {
-      if (connected) _channel?.sink.add(jsonEncode({'type': 'ping', 'payload': {}}));
+      if (connected)
+        _channel?.sink.add(jsonEncode({'type': 'ping', 'payload': {}}));
     });
   }
 
@@ -159,7 +191,9 @@ class RealtimeService extends ChangeNotifier {
     _channel = null;
     final ack = _pushRegistrationAck;
     if (ack != null && !ack.isCompleted) {
-      ack.completeError(StateError('Realtime connection lost during push registration'));
+      ack.completeError(
+        StateError('Realtime connection lost during push registration'),
+      );
     }
     _pushRegistrationAck = null;
     if (connected) {
