@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/calling.dart';
@@ -834,224 +835,278 @@ class _FullChatScreenState extends State<FullChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: nexusBlue,
-        foregroundColor: Colors.white,
-        toolbarHeight: 82,
-        titleSpacing: 4,
-        title: const NexusWordmark(onBlue: true, compact: true),
-        actions: [
-          if (accounts.length > 1)
-            PopupMenuButton<String>(
-              tooltip: 'WhatsApp account',
-              icon: const Icon(Icons.sim_card_outlined),
-              initialValue: selectedAccount,
-              onSelected: (value) async {
-                setState(() => selectedAccount = value);
-                await _loadCallPermission();
-                await _loadMessages();
-              },
-              itemBuilder: (_) => [
-                for (final account in accounts)
-                  PopupMenuItem(
-                    value: account['name']?.toString(),
-                    child: Text(account['name']?.toString() ?? 'Account'),
-                  ),
-              ],
-            ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'assign':
-                  _assign();
-                case 'transfer':
-                  _transferChatbot();
-                case 'info':
-                  _showInfo();
-                case 'delete_conversation':
-                  _deleteConversation();
-                case 'delete_contact':
-                  _deleteContact();
-              }
-            },
-            itemBuilder: (_) => [
-              const PopupMenuItem(value: 'assign', child: Text('Assign agent')),
-              PopupMenuItem(
-                value: 'transfer',
-                child: Text(
-                  transfers.isEmpty
-                      ? 'Transfer to agent queue'
-                      : 'Resume chatbot',
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        systemNavigationBarColor: nexusCream,
+        systemNavigationBarDividerColor: nexusCream,
+        systemNavigationBarIconBrightness: Brightness.dark,
+        systemNavigationBarContrastEnforced: false,
+      ),
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: nexusBlue,
+          foregroundColor: Colors.white,
+          toolbarHeight: 82,
+          titleSpacing: 8,
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                contactName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              const PopupMenuItem(
-                value: 'info',
-                child: Text('Contact & notes'),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'delete_conversation',
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.delete_sweep_outlined),
-                  title: Text('Delete conversation permanently'),
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'delete_contact',
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    Icons.person_remove_outlined,
-                    color: Colors.red,
-                  ),
-                  title: Text(
-                    'Delete contact permanently',
-                    style: TextStyle(color: Colors.red),
-                  ),
-                ),
+              const SizedBox(height: 2),
+              Text(
+                widget.contact['phone_number']?.toString() ?? '',
+                style: const TextStyle(fontSize: 12, color: Colors.white70),
               ),
             ],
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
-            child: Material(
-              color: nexusPink,
-              borderRadius: BorderRadius.circular(22),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(22),
-                onTap: _call,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 15,
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.phone_outlined, size: 29),
-                      const SizedBox(width: 16),
-                      Expanded(
+          actions: [
+            if (accounts.length > 1)
+              PopupMenuButton<String>(
+                tooltip: 'WhatsApp account',
+                icon: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(Icons.sim_card_outlined),
+                    Positioned(
+                      right: -7,
+                      top: -7,
+                      child: Container(
+                        constraints: const BoxConstraints(minWidth: 18),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: nexusPink,
+                          borderRadius: BorderRadius.circular(9),
+                        ),
                         child: Text(
-                          _callAllowed
-                              ? 'Call Access Allowed'
-                              : callPermission['status'] == 'pending'
-                              ? 'Call Access Pending'
-                              : 'Request Call Access',
+                          '${accounts.length}',
+                          textAlign: TextAlign.center,
                           style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
+                            color: Colors.black,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                      ),
-                      Icon(
-                        _callAllowed
-                            ? Icons.open_in_new_rounded
-                            : Icons.send_outlined,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    contactName,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      widget.contact['phone_number']?.toString() ?? '',
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                    Text(
-                      selectedAccount ?? 'WhatsApp',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors.black54,
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
-          if (transfers.isNotEmpty)
-            MaterialBanner(
-              content: const Text(
-                'Agent transfer is active for this conversation.',
+                initialValue: selectedAccount,
+                onSelected: (value) async {
+                  setState(() => selectedAccount = value);
+                  await _loadCallPermission();
+                  await _loadMessages();
+                },
+                itemBuilder: (_) => [
+                  for (final account in accounts)
+                    PopupMenuItem(
+                      value: account['name']?.toString(),
+                      child: Text(account['name']?.toString() ?? 'Account'),
+                    ),
+                ],
               ),
-              actions: [
-                TextButton(
-                  onPressed: _transferChatbot,
-                  child: const Text('Resume chatbot'),
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                switch (value) {
+                  case 'assign':
+                    _assign();
+                  case 'transfer':
+                    _transferChatbot();
+                  case 'info':
+                    _showInfo();
+                  case 'delete_conversation':
+                    _deleteConversation();
+                  case 'delete_contact':
+                    _deleteContact();
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'assign',
+                  child: Text('Assign agent'),
                 ),
-              ],
-            ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _loadMessages,
-              child: ListView.builder(
-                controller: scroll,
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                itemCount: messages.length,
-                itemBuilder: (_, i) => _MessageTile(
-                  message: messages[i],
-                  repo: widget.repo,
-                  onReply: () => setState(() => replyingTo = messages[i]),
-                  onReact: (emoji) async {
-                    await widget.repo.sendReaction(
-                      contactId,
-                      messages[i]['id'].toString(),
-                      emoji,
-                    );
-                    await _loadMessages(silent: true);
-                  },
+                PopupMenuItem(
+                  value: 'transfer',
+                  child: Text(
+                    transfers.isEmpty
+                        ? 'Transfer to agent queue'
+                        : 'Resume chatbot',
+                  ),
                 ),
-              ),
-            ),
-          ),
-          if (replyingTo != null)
-            Container(
-              padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: Row(
-                children: [
-                  const Icon(Icons.reply, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _preview(replyingTo!),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                const PopupMenuItem(
+                  value: 'info',
+                  child: Text('Contact & notes'),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'delete_conversation',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.delete_sweep_outlined),
+                    title: Text('Delete conversation permanently'),
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'delete_contact',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.person_remove_outlined,
+                      color: Colors.red,
+                    ),
+                    title: Text(
+                      'Delete contact permanently',
+                      style: TextStyle(color: Colors.red),
                     ),
                   ),
-                  IconButton(
-                    onPressed: () => setState(() => replyingTo = null),
-                    icon: const Icon(Icons.close, size: 18),
+                ),
+              ],
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            Stack(
+              children: [
+                const Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  height: 12,
+                  child: ColoredBox(color: nexusBlue),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 0),
+                  child: Material(
+                    color: nexusPink,
+                    borderRadius: BorderRadius.circular(16),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: _call,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 15,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.phone_outlined, size: 29),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Text(
+                                _callAllowed
+                                    ? 'Call Access Allowed'
+                                    : callPermission['status'] == 'pending'
+                                    ? 'Call Access Pending'
+                                    : 'Request Call Access',
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              _callAllowed
+                                  ? Icons.open_in_new_rounded
+                                  : Icons.send_outlined,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Container(
+              height: 44,
+              margin: const EdgeInsets.fromLTRB(18, 0, 18, 4),
+              padding: const EdgeInsets.only(left: 14, right: 4),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    transfers.isNotEmpty
+                        ? Icons.support_agent_rounded
+                        : Icons.smart_toy_outlined,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      transfers.isNotEmpty ? 'Agent mode' : 'Chatbot mode',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Switch.adaptive(
+                    value: transfers.isNotEmpty,
+                    onChanged: sending ? null : (_) => _transferChatbot(),
                   ),
                 ],
               ),
             ),
-          _composer(),
-        ],
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _loadMessages,
+                child: ListView.builder(
+                  controller: scroll,
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                  itemCount: messages.length,
+                  itemBuilder: (_, i) => _MessageTile(
+                    message: messages[i],
+                    repo: widget.repo,
+                    onReply: () => setState(() => replyingTo = messages[i]),
+                    onReact: (emoji) async {
+                      await widget.repo.sendReaction(
+                        contactId,
+                        messages[i]['id'].toString(),
+                        emoji,
+                      );
+                      await _loadMessages(silent: true);
+                    },
+                  ),
+                ),
+              ),
+            ),
+            if (replyingTo != null)
+              Container(
+                padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: Row(
+                  children: [
+                    const Icon(Icons.reply, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _preview(replyingTo!),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => setState(() => replyingTo = null),
+                      icon: const Icon(Icons.close, size: 18),
+                    ),
+                  ],
+                ),
+              ),
+            _composer(),
+          ],
+        ),
       ),
     );
   }
