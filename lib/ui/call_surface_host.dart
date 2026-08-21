@@ -94,9 +94,11 @@ class _CallSurfaceHostState extends State<CallSurfaceHost>
         widget.calls.state.active &&
         !_endingFromDetach) {
       _endingFromDetach = true;
-      unawaited(widget.calls.hangup().catchError((_) {}).whenComplete(() {
-        _endingFromDetach = false;
-      }));
+      unawaited(
+        widget.calls.hangup().catchError((_) {}).whenComplete(() {
+          _endingFromDetach = false;
+        }),
+      );
     }
   }
 
@@ -189,10 +191,10 @@ class _CallSurfaceHostState extends State<CallSurfaceHost>
       _error = null;
     });
     try {
-      final response = await widget.api.get('/teams', query: {
-        'page': 1,
-        'limit': 100,
-      });
+      final response = await widget.api.get(
+        '/teams',
+        query: {'page': 1, 'limit': 100},
+      );
       final data = widget.api.unwrap(response);
       dynamic raw = data;
       if (data is Map) raw = data['teams'] ?? data['items'] ?? data['data'];
@@ -236,6 +238,7 @@ class _CallSurfaceHostState extends State<CallSurfaceHost>
     final media = MediaQueryData.fromView(View.of(context));
     return Stack(
       fit: StackFit.expand,
+      alignment: Alignment.topLeft,
       children: [
         widget.child,
         if (!active && incoming != null)
@@ -246,7 +249,9 @@ class _CallSurfaceHostState extends State<CallSurfaceHost>
               child: Theme(
                 data: ThemeData(
                   useMaterial3: true,
-                  colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff0738f9)),
+                  colorScheme: ColorScheme.fromSeed(
+                    seedColor: const Color(0xff0738f9),
+                  ),
                 ),
                 child: _IncomingCallScreen(
                   transfer: incoming,
@@ -323,8 +328,10 @@ class _IncomingCallScreen extends StatelessWidget {
   String get caller {
     final contact = transfer['contact'];
     if (contact is Map) {
-      final value = contact['profile_name'] ?? contact['name'] ?? contact['phone_number'];
-      if (value != null && value.toString().trim().isNotEmpty) return value.toString();
+      final value =
+          contact['profile_name'] ?? contact['name'] ?? contact['phone_number'];
+      if (value != null && value.toString().trim().isNotEmpty)
+        return value.toString();
     }
     return (transfer['contact_name'] ??
             transfer['caller_name'] ??
@@ -336,7 +343,9 @@ class _IncomingCallScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final value = caller;
-    final initial = value.trim().isEmpty ? '?' : value.trim().characters.first.toUpperCase();
+    final initial = value.trim().isEmpty
+        ? '?'
+        : value.trim().characters.first.toUpperCase();
     return Material(
       color: const Color(0xff0738f9),
       child: SafeArea(
@@ -381,12 +390,17 @@ class _IncomingCallScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    (transfer['caller_phone'] ?? 'WhatsApp voice call').toString(),
+                    (transfer['caller_phone'] ?? 'WhatsApp voice call')
+                        .toString(),
                     style: const TextStyle(color: Colors.white70, fontSize: 16),
                   ),
                   if (error != null && error!.isNotEmpty) ...[
                     const SizedBox(height: 18),
-                    Text(error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white)),
+                    Text(
+                      error!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white),
+                    ),
                   ],
                   const SizedBox(height: 48),
                   Row(
@@ -453,7 +467,13 @@ class _IncomingAction extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 9),
-        Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ],
     );
   }
@@ -523,7 +543,9 @@ class _ActiveCallScreen extends StatelessWidget {
                         ),
                         const Spacer(),
                         Text(
-                          s.direction == 'incoming' ? 'INCOMING CALL' : 'WHATSAPP CALL',
+                          s.direction == 'incoming'
+                              ? 'INCOMING CALL'
+                              : 'WHATSAPP CALL',
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
@@ -563,7 +585,10 @@ class _ActiveCallScreen extends StatelessWidget {
                       const SizedBox(height: 5),
                       Text(
                         s.phone,
-                        style: const TextStyle(fontSize: 16, color: Color(0xff444444)),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Color(0xff444444),
+                        ),
                       ),
                     ],
                     const SizedBox(height: 12),
@@ -577,7 +602,10 @@ class _ActiveCallScreen extends StatelessWidget {
                     ),
                     if (answered) ...[
                       const SizedBox(height: 4),
-                      Text(status, style: const TextStyle(color: Color(0xff555555))),
+                      Text(
+                        status,
+                        style: const TextStyle(color: Color(0xff555555)),
+                      ),
                     ],
                     if (s.onHold) ...[
                       const SizedBox(height: 8),
@@ -625,7 +653,9 @@ class _ActiveCallScreen extends StatelessWidget {
                           icon: Icons.phone_forwarded,
                           label: 'Transfer',
                           selected: false,
-                          onTap: busy || s.callLogId == null ? null : onTransfer,
+                          onTap: busy || s.callLogId == null
+                              ? null
+                              : onTransfer,
                         ),
                       ],
                     ),
@@ -653,7 +683,10 @@ class _ActiveCallScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text('End call', style: TextStyle(fontWeight: FontWeight.w600)),
+                    const Text(
+                      'End call',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
                   ],
                 ),
               ),
@@ -674,41 +707,75 @@ class _ActiveCallScreen extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Padding(
-                                padding: const EdgeInsets.fromLTRB(20, 18, 8, 10),
+                                padding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  18,
+                                  8,
+                                  10,
+                                ),
                                 child: Row(
                                   children: [
                                     const Expanded(
                                       child: Text(
                                         'Transfer call to team',
-                                        style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700),
+                                        style: TextStyle(
+                                          fontSize: 19,
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                       ),
                                     ),
-                                    IconButton(onPressed: onCloseTransfer, icon: const Icon(Icons.close)),
+                                    IconButton(
+                                      onPressed: onCloseTransfer,
+                                      icon: const Icon(Icons.close),
+                                    ),
                                   ],
                                 ),
                               ),
                               const Divider(height: 1),
                               if (loadingTeams)
-                                const Expanded(child: Center(child: CircularProgressIndicator()))
+                                const Expanded(
+                                  child: Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                )
                               else if (teams.isEmpty)
-                                const Expanded(child: Center(child: Text('No teams available')))
+                                const Expanded(
+                                  child: Center(
+                                    child: Text('No teams available'),
+                                  ),
+                                )
                               else
                                 Flexible(
                                   child: ListView.separated(
                                     shrinkWrap: true,
                                     itemCount: teams.length,
-                                    separatorBuilder: (_, __) => const Divider(height: 1),
+                                    separatorBuilder: (_, __) =>
+                                        const Divider(height: 1),
                                     itemBuilder: (context, index) {
                                       final team = teams[index];
-                                      final name = (team['name'] ?? team['title'] ?? 'Team').toString();
-                                      final description = (team['description'] ?? '').toString();
+                                      final name =
+                                          (team['name'] ??
+                                                  team['title'] ??
+                                                  'Team')
+                                              .toString();
+                                      final description =
+                                          (team['description'] ?? '')
+                                              .toString();
                                       return ListTile(
-                                        leading: const CircleAvatar(child: Icon(Icons.groups_outlined)),
+                                        leading: const CircleAvatar(
+                                          child: Icon(Icons.groups_outlined),
+                                        ),
                                         title: Text(name),
-                                        subtitle: description.isEmpty ? null : Text(description),
-                                        trailing: const Icon(Icons.chevron_right),
+                                        subtitle: description.isEmpty
+                                            ? null
+                                            : Text(description),
+                                        trailing: const Icon(
+                                          Icons.chevron_right,
+                                        ),
                                         enabled: !busy,
-                                        onTap: busy ? null : () => onTransferTo(team),
+                                        onTap: busy
+                                            ? null
+                                            : () => onTransferTo(team),
                                       );
                                     },
                                   ),
@@ -776,7 +843,10 @@ class _MiniCallBar extends StatelessWidget {
                           ),
                           Text(
                             '${_friendlyStatus(s.status, s.direction)} • ${_duration(s.seconds)}',
-                            style: const TextStyle(color: Color(0xffdddddd), fontSize: 12),
+                            style: const TextStyle(
+                              color: Color(0xffdddddd),
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
@@ -828,13 +898,19 @@ class _CallControl extends StatelessWidget {
                 backgroundColor: selected
                     ? const Color(0xff0738f9)
                     : const Color(0xffffd4fc),
-                foregroundColor: selected ? Colors.white : const Color(0xff0c0c0c),
+                foregroundColor: selected
+                    ? Colors.white
+                    : const Color(0xff0c0c0c),
               ),
               icon: Icon(icon, size: 27),
             ),
           ),
           const SizedBox(height: 7),
-          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12)),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12),
+          ),
         ],
       ),
     );

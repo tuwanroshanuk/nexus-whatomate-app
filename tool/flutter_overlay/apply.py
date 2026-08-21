@@ -41,19 +41,19 @@ elif "FullChatScreen(" not in text:
 contacts_page = "      ContactsScreen(repo: repo, calls: widget.calls),\n"
 if contacts_page in text:
     text = text.replace(contacts_page, "      EnhancedContactsScreen(repo: repo, calls: widget.calls),\n", 1)
-elif "EnhancedContactsScreen(repo: repo" not in text:
+elif "EnhancedContactsScreen(" not in text:
     raise SystemExit("Could not locate Contacts tab")
 
 dialer_page = "      DialerScreen(repo: repo, calls: widget.calls),\n"
 if dialer_page in text:
     text = text.replace(dialer_page, "      EnhancedDialerScreen(repo: repo, calls: widget.calls),\n", 1)
-elif "EnhancedDialerScreen(repo: repo" not in text:
+elif "EnhancedDialerScreen(" not in text:
     raise SystemExit("Could not locate Dialer tab")
 
 calls_page = "      CallsScreen(repo: repo, calls: widget.calls, realtime: widget.realtime),\n"
 if calls_page in text:
     text = text.replace(calls_page, "      EnhancedCallsScreen(repo: repo, calls: widget.calls, realtime: widget.realtime),\n", 1)
-elif "EnhancedCallsScreen(repo: repo" not in text:
+elif "EnhancedCallsScreen(" not in text:
     raise SystemExit("Could not locate Calls tab")
 
 old_builder = "onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>GenericModuleScreen(repo:repo,module:m)))"
